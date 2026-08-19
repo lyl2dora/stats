@@ -14,8 +14,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: xcodebuild -scheme Stats -destination 'platform=macOS,arch=arm64' -configuration Release archive CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO

@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   release:
-    runs-on: macos-15
+    runs-on: macos-26
 
     # the signing and notarisation secrets live in this environment, without it
     # they resolve to empty strings and the certificate import fails silently
@@ -29,7 +29,7 @@ jobs:
       ENV_FILE: /nonexistent
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload the artifact
         if: "!startsWith(github.ref, 'refs/tags/')"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Stats.dmg
           path: Stats.dmg
