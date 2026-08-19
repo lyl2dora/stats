@@ -17,10 +17,6 @@ jobs:
   release:
     runs-on: macos-26
 
-    # the signing and notarisation secrets live in this environment, without it
-    # they resolve to empty strings and the certificate import fails silently
-    environment: APPLE_API_KEY_ID
-
     env:
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
