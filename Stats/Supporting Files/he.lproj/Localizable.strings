@@ -202,6 +202,7 @@
 "One row" = "שורה אחת";
 "Two rows" = "שתי שורות";
 "Mini widget" = "מיני";
+"Drive widget" = "Drive";
 "Line chart widget" = "מגמת שורות";
 "Bar chart widget" = "טבלת עמודות";
 "Pie chart widget" = "טבלת עוגה";
@@ -346,6 +347,16 @@
 "Encrypted" = "מוצפן"; // gemma4:31b-it-qat
 "Writable" = "ניתן לכתיבה"; // gemma4:31b-it-qat
 "Drives" = "כוננים"; // gemma4:31b
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "נתוני SMART"; // gemma4:31b
 "ATA SMART data" = "נתוני ATA SMART"; // gemma4:31b
 "Power cycles" = "מחזורי טעינה"; // gemma4:31b

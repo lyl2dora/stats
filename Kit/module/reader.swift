@@ -43,7 +43,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     public var log: NextLog {
         NextLog.shared.copy(category: "\(String(describing: self))")
     }
-    private let valueQueue = DispatchQueue(label: "eu.exelban.readerActiveQueue")
+    private let valueQueue = DispatchQueue(label: "zone.lyl.readerActiveQueue")
     private var _value: T?
     public var value: T? {
         get { self.valueQueue.sync { self._value } }
@@ -70,7 +70,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     private var locked: Bool = true
     private var initlizalized: Bool = false
     
-    private let activeQueue = DispatchQueue(label: "eu.exelban.readerActiveQueue")
+    private let activeQueue = DispatchQueue(label: "zone.lyl.readerActiveQueue")
     private var _active: Bool = false
     public var active: Bool {
         get { self.activeQueue.sync { self._active } }
@@ -80,7 +80,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     private var lastDBWrite: Date? = nil
     
     private var alignGeneration: UInt = 0
-    private let alignQueue = DispatchQueue(label: "eu.exelban.readerAlignQueue")
+    private let alignQueue = DispatchQueue(label: "zone.lyl.readerAlignQueue")
     
     public init(_ module: ModuleType, popup: Bool = false, preview: Bool = false, history: Bool = false, callback: @escaping (T?) -> Void = {_ in }) {
         self.popup = popup

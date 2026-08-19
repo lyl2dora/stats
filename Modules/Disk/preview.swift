@@ -28,12 +28,14 @@ internal class Preview: PreviewWrapper {
     private var allDisks: PreferencesSection? = nil
     private var disks: NSGridView = {
         let grid = NSGridView(frame: .zero)
-        grid.rowSpacing = Constants.Settings.margin
+        grid.rowSpacing = 0
         grid.rowAlignment = .none
-        grid.yPlacement = .center
+        grid.yPlacement = .fill
         return grid
     }()
-    private var diskRows: [String: DiskRow] = [:]
+    private var diskRows: [String: DriveRow] = [:]
+    private var drives: [physicalDrive] = []
+    private var selectedDrive: String = ""
     
     private var initialized: Bool = false
     
@@ -58,10 +60,10 @@ internal class Preview: PreviewWrapper {
     private var totalReadValueField: ValueField?
     private var totalWrittenValueField: ValueField?
     private var modelValueField: ValueField?
+    private var serialValueField: ValueField?
+    private var capacityValueField: ValueField?
     private var connectionTypeValueField: ValueField?
     private var bsdNameValueField: ValueField?
-    private var encryptedValueField: ValueField?
-    private var writableValueField: ValueField?
 
     private var smartTotalReadValueField: ValueField?
     private var smartTotalWrittenValueField: ValueField?
@@ -80,6 +82,7 @@ internal class Preview: PreviewWrapper {
         super.init(type: module)
         
         self.loadColors()
+        self.selectedDrive = Store.shared.string(key: "\(module.stringValue)_preview_selected", defaultValue: "")
         
         self.addArrangedSubview(PreferencesSection([self.usageView()]))
         
@@ -258,10 +261,10 @@ internal class Preview: PreviewWrapper {
         self.totalReadValueField = previewRow(view, title: "\(localizedString("Total read")):", value: "0 KB")
         self.totalWrittenValueField = previewRow(view, title: "\(localizedString("Total written")):", value: "0 KB")
         self.modelValueField = previewRow(view, title: "\(localizedString("Model")):", value: localizedString("Unknown"))
+        self.serialValueField = previewRow(view, title: "\(localizedString("Serial number")):", value: localizedString("Unknown"))
+        self.capacityValueField = previewRow(view, title: "\(localizedString("Capacity")):", value: localizedString("Unknown"))
         self.connectionTypeValueField = previewRow(view, title: "\(localizedString("Connection type")):", value: localizedString("Unknown"))
         self.bsdNameValueField = previewRow(view, title: "\(localizedString("BSD name")):", value: localizedString("Unknown"))
-        self.encryptedValueField = previewRow(view, title: "\(localizedString("Encrypted")):", value: localizedString("No"))
-        self.writableValueField = previewRow(view, title: "\(localizedString("Writable")):", value: localizedString("Yes"))
         
         return view
     }
@@ -288,146 +291,162 @@ internal class Preview: PreviewWrapper {
     
     internal func capacityCallback(_ value: Disks) {
         DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.initialized {
-                if let main = self.main, let update = value.first(where: { $0.uuid == main.id }) {
-                    let free = update.free
-                    let used = update.size - free
-                    self.usedField?.stringValue = DiskSize(used).getReadableMemory()
-                    self.freeField?.stringValue = DiskSize(free).getReadableMemory()
-                    
-                    self.circle?.setValue(update.percentage)
-                    self.bar?.setValue(ColorValue(update.percentage, color: update.percentage.usageColor()))
-                    
-                    self.uri = update.path
-                    
-                    self.modelValueField?.stringValue = update.model.isEmpty ? localizedString("Unknown") : update.model
-                    self.connectionTypeValueField?.stringValue = update.connectionType.isEmpty ? localizedString("Unknown") : update.connectionType
-                    self.bsdNameValueField?.stringValue = update.BSDName.isEmpty ? localizedString("Unknown") : update.BSDName
-                    self.encryptedValueField?.stringValue = localizedString(update.encrypted ? "Yes" : "No")
-                    self.writableValueField?.stringValue = localizedString(update.writable ? "Yes" : "No")
-                    
-                    if let smart = update.smart {
-                        self.smartTotalReadValueField?.toolTip = "\(smart.totalRead / (512 * 1000))"
-                        self.smartTotalWrittenValueField?.toolTip = "\(smart.totalWritten / (512 * 1000))"
-                        self.smartTotalReadValueField?.stringValue = Units(bytes: smart.totalRead).getReadableMemory()
-                        self.smartTotalWrittenValueField?.stringValue = Units(bytes: smart.totalWritten).getReadableMemory()
-                        
-                        self.temperatureValueField?.stringValue = "\(temperature(Double(smart.temperature)))"
-                        self.healthValueField?.stringValue = "\(smart.life)%"
-                        
-                        self.powerCyclesValueField?.stringValue = "\(smart.powerCycles)"
-                        self.powerOnHoursValueField?.stringValue = "\(smart.powerOnHours)"
-                        
-                        if let warning = smart.criticalWarning {
-                            let list = smartCriticalWarnings(warning)
-                            self.criticalWarningValueField?.stringValue = list.isEmpty ? localizedString("None") : list.joined(separator: ", ")
-                            self.criticalWarningValueField?.textColor = list.isEmpty ? .textColor : .systemRed
-                        } else {
-                            self.criticalWarningValueField?.stringValue = localizedString("Unavailable")
-                            self.criticalWarningValueField?.textColor = .textColor
-                        }
-                        
-                        if let spare = smart.availableSpare {
-                            self.availableSpareValueField?.stringValue = "\(spare)%"
-                            if let threshold = smart.spareThreshold {
-                                self.availableSpareValueField?.textColor = spare < threshold ? .systemRed : .textColor
-                                self.availableSpareValueField?.toolTip = "\(localizedString("Threshold")): \(threshold)%"
-                            }
-                        } else {
-                            self.availableSpareValueField?.stringValue = localizedString("Unavailable")
-                        }
-                        
-                        self.unsafeShutdownsValueField?.stringValue = smart.unsafeShutdowns.map { "\($0)" } ?? localizedString("Unavailable")
-                        
-                        if let mediaErrors = smart.mediaErrors {
-                            self.mediaErrorsValueField?.stringValue = "\(mediaErrors)"
-                            self.mediaErrorsValueField?.textColor = mediaErrors > 0 ? .systemRed : .textColor
-                        } else {
-                            self.mediaErrorsValueField?.stringValue = localizedString("Unavailable")
-                            self.mediaErrorsValueField?.textColor = .textColor
-                        }
-                    }
-                }
-                
-                let drives = value.filter(where: { $0.uuid != self.main?.id })
-                
-                if drives.isEmpty {
-                    self.allDisks?.isHidden = true
-                } else if !drives.isEmpty {
-                    self.allDisks?.isHidden = false
-                }
-                
-                let mounted = value.count
-                let external = value.filter(where: { $0.removable }).count
-                self.allDisks?.setSubtitle("\(mounted) \(localizedString("mounted")) · \(external) \(localizedString("removable"))")
-                
-                let driveUUIDs = Set(drives.map { $0.uuid })
-                for uuid in Array(self.diskRows.keys) where !driveUUIDs.contains(uuid) {
-                    if let row = self.diskRows[uuid] {
-                        row.cells.forEach { $0.removeFromSuperview() }
-                        if let gridRow = row.gridRow {
-                            let index = self.disks.index(of: gridRow)
-                            if index != NSNotFound {
-                                self.disks.removeRow(at: index)
-                            }
-                        }
-                        if let sepRow = row.separatorRow {
-                            let index = self.disks.index(of: sepRow)
-                            if index != NSNotFound {
-                                self.disks.removeRow(at: index)
-                            }
-                        }
-                        self.diskRows.removeValue(forKey: uuid)
-                    }
-                }
-                let firstRow = self.diskRows.values
-                    .compactMap { row -> (row: DiskRow, index: Int)? in
-                        guard let gr = row.gridRow else { return nil }
-                        let idx = self.disks.index(of: gr)
-                        return idx == NSNotFound ? nil : (row, idx)
-                    }
-                    .min(by: { $0.index < $1.index })?.row
-                if let firstRow = firstRow, let sepRow = firstRow.separatorRow {
-                    let index = self.disks.index(of: sepRow)
-                    if index != NSNotFound {
-                        self.disks.removeRow(at: index)
-                    }
-                    firstRow.separatorRow = nil
-                }
-                
-                drives.forEach { drive in
-                    if let row = self.diskRows[drive.uuid] {
-                        row.update(drive)
-                    } else {
-                        let row = DiskRow(drive)
-                        let isFirst = self.disks.numberOfRows == 0
-                        if !self.diskRows.isEmpty {
-                            let sep = NSView()
-                            sep.wantsLayer = true
-                            sep.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.05).cgColor
-                            sep.heightAnchor.constraint(equalToConstant: 1).isActive = true
-                            let sepCells = (0..<max(1, self.disks.numberOfColumns)).map { _ -> NSView in NSView() }
-                            var cells: [NSView] = sepCells
-                            cells[0] = sep
-                            let sepRow = self.disks.addRow(with: cells)
-                            if self.disks.numberOfColumns > 1 {
-                                sepRow.mergeCells(in: NSRange(location: 0, length: self.disks.numberOfColumns))
-                            }
-                            row.separatorRow = sepRow
-                        }
-                        row.gridRow = self.disks.addRow(with: row.cells)
-                        if isFirst {
-                            self.disks.column(at: 0).xPlacement = .leading
-                            self.disks.column(at: 1).xPlacement = .center
-                            self.disks.column(at: 2).xPlacement = .trailing
-                        }
-                        self.diskRows[drive.uuid] = row
-                    }
-                }
-                
-                self.initialized = true
-            }
+            guard (self.window?.isVisible ?? false) || !self.initialized else { return }
+            guard let main = self.main, let update = value.first(where: { $0.uuid == main.id }) else { return }
+            
+            let free = update.free
+            let used = update.size - free
+            self.usedField?.stringValue = DiskSize(used).getReadableMemory()
+            self.freeField?.stringValue = DiskSize(free).getReadableMemory()
+            
+            self.circle?.setValue(update.percentage)
+            self.bar?.setValue(ColorValue(update.percentage, color: update.percentage.usageColor()))
+            
+            self.uri = update.path
+            
+            self.initialized = true
         })
+    }
+    
+    // The drive list and everything below it follows the selection, the usage summary and the history
+    // chart at the top stay on the boot volume.
+    internal func smartCallback(_ value: [physicalDrive]) {
+        DispatchQueue.main.async(execute: {
+            self.drives = value
+            
+            guard (self.window?.isVisible ?? false) || !self.initialized else { return }
+            
+            self.allDisks?.isHidden = value.isEmpty
+            let external = value.filter({ !$0.isInternal }).count
+            self.allDisks?.setSubtitle("\(value.count) \(localizedString("drives")) · \(external) \(localizedString("external"))")
+            
+            self.syncRows(value)
+            self.renderSelection()
+        })
+    }
+    
+    private func syncRows(_ value: [physicalDrive]) {
+        let ids = Set(value.map { $0.id })
+        for id in Array(self.diskRows.keys) where !ids.contains(id) {
+            guard let row = self.diskRows[id] else { continue }
+            row.cells.forEach { $0.removeFromSuperview() }
+            if let gridRow = row.gridRow {
+                let index = self.disks.index(of: gridRow)
+                if index != NSNotFound {
+                    self.disks.removeRow(at: index)
+                }
+            }
+            self.diskRows.removeValue(forKey: id)
+        }
+        
+        value.forEach { d in
+            if let row = self.diskRows[d.id] {
+                row.update(d)
+                return
+            }
+            
+            let row = DriveRow(d)
+            row.clickCallback = { [weak self] id in
+                self?.select(id)
+            }
+            let isFirst = self.disks.numberOfRows == 0
+            row.gridRow = self.disks.addRow(with: row.cells)
+            if isFirst {
+                self.disks.column(at: 0).xPlacement = .fill
+            }
+            self.diskRows[d.id] = row
+        }
+        
+        // the hairline belongs to the row, not to a row of its own, otherwise the gaps around it
+        // are dead space that swallows clicks
+        let ordered = self.diskRows.values.compactMap { row -> (row: DriveRow, index: Int)? in
+            guard let gr = row.gridRow else { return nil }
+            let idx = self.disks.index(of: gr)
+            return idx == NSNotFound ? nil : (row, idx)
+        }.sorted(by: { $0.index < $1.index })
+        ordered.enumerated().forEach { $0.element.row.showSeparator($0.offset != 0) }
+    }
+    
+    private func select(_ id: String) {
+        guard self.selectedDrive != id else { return }
+        self.selectedDrive = id
+        Store.shared.set(key: "\(self.module.stringValue)_preview_selected", value: id)
+        self.renderSelection()
+    }
+    
+    private func renderSelection() {
+        // a drive can be unplugged while it is selected, fall back to the built in one
+        var selected = self.drives.first(where: { $0.id == self.selectedDrive })
+        if selected == nil {
+            selected = self.drives.first(where: { $0.isInternal }) ?? self.drives.first
+            self.selectedDrive = selected?.id ?? ""
+        }
+        
+        self.diskRows.forEach { $0.value.setSelected($0.key == self.selectedDrive) }
+        
+        guard let d = selected else { return }
+        
+        self.modelValueField?.stringValue = d.model.isEmpty ? localizedString("Unknown") : d.model
+        self.serialValueField?.stringValue = d.serial.isEmpty ? localizedString("Unknown") : d.serial
+        self.capacityValueField?.stringValue = DiskSize(d.size).getReadableMemory()
+        self.connectionTypeValueField?.stringValue = d.connectionType.isEmpty ? localizedString("Unknown") : d.connectionType
+        self.bsdNameValueField?.stringValue = d.BSDName.isEmpty ? localizedString("Unknown") : d.BSDName
+        
+        self.readSpeedValueField?.stringValue = Units(bytes: d.activity.read).getReadableSpeed(base: self.base, unit: self.speedUnit)
+        self.writeSpeedValueField?.stringValue = Units(bytes: d.activity.write).getReadableSpeed(base: self.base, unit: self.speedUnit)
+        self.totalReadValueField?.stringValue = Units(bytes: d.activity.readBytes).getReadableMemory()
+        self.totalWrittenValueField?.stringValue = Units(bytes: d.activity.writeBytes).getReadableMemory()
+        
+        guard let smart = d.smart else {
+            [self.smartTotalReadValueField, self.smartTotalWrittenValueField, self.temperatureValueField,
+             self.healthValueField, self.powerCyclesValueField, self.powerOnHoursValueField,
+             self.criticalWarningValueField, self.availableSpareValueField, self.unsafeShutdownsValueField,
+             self.mediaErrorsValueField].forEach {
+                $0?.stringValue = localizedString("Unavailable")
+                $0?.textColor = .textColor
+            }
+            return
+        }
+        
+        self.smartTotalReadValueField?.toolTip = "\(smart.totalRead / (512 * 1000))"
+        self.smartTotalWrittenValueField?.toolTip = "\(smart.totalWritten / (512 * 1000))"
+        self.smartTotalReadValueField?.stringValue = Units(bytes: smart.totalRead).getReadableMemory()
+        self.smartTotalWrittenValueField?.stringValue = Units(bytes: smart.totalWritten).getReadableMemory()
+        
+        self.temperatureValueField?.stringValue = "\(temperature(Double(smart.temperature)))"
+        self.healthValueField?.stringValue = "\(smart.life)%"
+        
+        self.powerCyclesValueField?.stringValue = "\(smart.powerCycles)"
+        self.powerOnHoursValueField?.stringValue = "\(smart.powerOnHours)"
+        
+        if let warning = smart.criticalWarning {
+            let list = smartCriticalWarnings(warning)
+            self.criticalWarningValueField?.stringValue = list.isEmpty ? localizedString("None") : list.joined(separator: ", ")
+            self.criticalWarningValueField?.textColor = list.isEmpty ? .textColor : .systemRed
+        } else {
+            self.criticalWarningValueField?.stringValue = localizedString("Unavailable")
+            self.criticalWarningValueField?.textColor = .textColor
+        }
+        
+        if let spare = smart.availableSpare {
+            self.availableSpareValueField?.stringValue = "\(spare)%"
+            if let threshold = smart.spareThreshold {
+                self.availableSpareValueField?.textColor = spare < threshold ? .systemRed : .textColor
+                self.availableSpareValueField?.toolTip = "\(localizedString("Threshold")): \(threshold)%"
+            }
+        } else {
+            self.availableSpareValueField?.stringValue = localizedString("Unavailable")
+        }
+        
+        self.unsafeShutdownsValueField?.stringValue = smart.unsafeShutdowns.map { "\($0)" } ?? localizedString("Unavailable")
+        
+        if let mediaErrors = smart.mediaErrors {
+            self.mediaErrorsValueField?.stringValue = "\(mediaErrors)"
+            self.mediaErrorsValueField?.textColor = mediaErrors > 0 ? .systemRed : .textColor
+        } else {
+            self.mediaErrorsValueField?.stringValue = localizedString("Unavailable")
+            self.mediaErrorsValueField?.textColor = .textColor
+        }
     }
     
     internal func activityCallback(_ value: Disks) {
@@ -444,17 +463,7 @@ internal class Preview: PreviewWrapper {
         
         self.writeState?.toolTip = "Write: \(Units(bytes: write).getReadableSpeed(base: self.base, unit: self.speedUnit))"
         self.writeState?.layer?.backgroundColor = write != 0 ? self.writeColor.cgColor : NSColor.lightGray.withAlphaComponent(0.75).cgColor
-        
-        self.readSpeedValueField?.stringValue = Units(bytes: read).getReadableSpeed(base: self.base, unit: self.speedUnit)
-        self.writeSpeedValueField?.stringValue = Units(bytes: write).getReadableSpeed(base: self.base, unit: self.speedUnit)
-        
-        let stats = update.activity
-        self.totalReadValueField?.stringValue = Units(bytes: stats.readBytes).getReadableMemory()
-        self.totalReadValueField?.toolTip = "\(stats.readBytes / (512 * 1000))"
-        self.totalWrittenValueField?.stringValue = Units(bytes: stats.writeBytes).getReadableMemory()
-        self.totalWrittenValueField?.toolTip = "\(stats.writeBytes / (512 * 1000))"
     }
-    
     @objc private func openDisk() {
         if let uri = self.uri, let finder = self.finder {
             NSWorkspace.shared.open([uri], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration())
@@ -462,97 +471,147 @@ internal class Preview: PreviewWrapper {
     }
 }
 
-internal class DiskRow {
-    public let uuid: String
+// One physical drive in the "All disks" list. The whole row is the selection target, so it lives in a
+// single grid cell and lays its own columns out instead of leaning on the grid.
+internal class DriveRow: NSView {
+    public let id: String
     public var gridRow: NSGridRow?
-    public var separatorRow: NSGridRow?
+    public var clickCallback: ((String) -> Void)? = nil
     
-    private let nameField: NSButton
-    private let capacityField: LegendView
+    private let nameField: NSTextField
+    private let modelField: NSTextField
+    private let healthField: NSTextField
+    private let temperatureField: NSTextField
     private let bar: BarChartView = BarChartView(size: 6, horizontal: true)
-    private let capacityView: NSStackView = NSStackView()
-    private let fileSystemField: NSTextField
-    private let ejectButton: NSButton = NSButton()
-
-    private let uri: URL?
-    private let finder: URL?
-
-    public var cells: [NSView] { [self.nameField, self.capacityView, self.fileSystemField, self.ejectButton] }
+    private let separator: NSView = NSView()
     
-    init(_ drive: drive) {
-        self.uuid = drive.uuid
-        self.uri = drive.path
-        self.finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Finder")
+    private var selected: Bool = false
+    
+    public var cells: [NSView] { [self] }
+    
+    init(_ d: physicalDrive) {
+        self.id = d.id
         
-        self.nameField = NSButton()
-        self.nameField.bezelStyle = .inline
-        self.nameField.isBordered = false
-        self.nameField.contentTintColor = .labelColor
-        self.nameField.action = #selector(self.openDisk)
-        self.nameField.toolTip = drive.mediaName
-        self.nameField.title = drive.mediaName
-        self.nameField.cell?.truncatesLastVisibleLine = true
+        self.nameField = LabelField(d.name, size: 11)
         self.nameField.font = .systemFont(ofSize: 11, weight: .semibold)
+        self.nameField.textColor = .labelColor
         
-        self.fileSystemField = LabelField(drive.fileSystem.uppercased())
-        self.fileSystemField.font = .systemFont(ofSize: 10, weight: .regular)
-        self.fileSystemField.textColor = .tertiaryLabelColor
+        self.modelField = LabelField("", size: 10)
+        self.modelField.textColor = .tertiaryLabelColor
         
-        self.ejectButton.bezelStyle = .inline
-        self.ejectButton.isBordered = false
-        self.ejectButton.imagePosition = .imageOnly
-        self.ejectButton.image = NSImage(systemSymbolName: "eject", accessibilityDescription: localizedString("Eject"))
-        self.ejectButton.contentTintColor = .secondaryLabelColor
-        self.ejectButton.toolTip = localizedString("Eject")
-        self.ejectButton.isEnabled = drive.removable && drive.path != nil
-        self.ejectButton.action = #selector(self.ejectDisk)
+        self.healthField = LabelField("", size: 10)
+        self.healthField.alignment = .right
         
-        let topRow = NSStackView()
-        topRow.orientation = .horizontal
-        self.capacityField = LegendView(id: drive.uuid, size: drive.size, free: drive.free)
-        topRow.addArrangedSubview(self.capacityField)
-        topRow.addArrangedSubview(NSView())
+        self.temperatureField = ValueField("")
+        self.temperatureField.font = .systemFont(ofSize: 12, weight: .regular)
         
-        self.capacityView.orientation = .vertical
-        self.capacityView.translatesAutoresizingMaskIntoConstraints = false
-        self.capacityView.edgeInsets = NSEdgeInsets(top: 0, left: Constants.Settings.margin, bottom: 0, right: 0)
+        super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 34))
         
-        self.capacityView.addArrangedSubview(topRow)
-        self.capacityView.addArrangedSubview(self.bar)
+        self.wantsLayer = true
+        self.layer?.cornerRadius = 4
+        self.translatesAutoresizingMaskIntoConstraints = false
+        self.heightAnchor.constraint(equalToConstant: 34).isActive = true
+        self.toolTip = "\(d.model) · \(d.serial)"
         
-        self.update(drive)
+        let title = NSStackView()
+        title.orientation = .vertical
+        title.alignment = .leading
+        title.spacing = 1
+        title.addArrangedSubview(self.nameField)
+        title.addArrangedSubview(self.modelField)
         
-        self.nameField.target = self
-        self.ejectButton.target = self
+        let health = NSStackView()
+        health.orientation = .vertical
+        health.alignment = .trailing
+        health.spacing = 2
+        health.addArrangedSubview(self.healthField)
+        health.addArrangedSubview(self.bar)
+        health.widthAnchor.constraint(equalToConstant: 90).isActive = true
+        self.bar.widthAnchor.constraint(equalToConstant: 90).isActive = true
+        self.bar.heightAnchor.constraint(equalToConstant: 6).isActive = true
+        
+        self.temperatureField.widthAnchor.constraint(equalToConstant: 46).isActive = true
+        
+        let container = NSStackView()
+        container.orientation = .horizontal
+        container.alignment = .centerY
+        container.spacing = Constants.Settings.margin
+        container.edgeInsets = NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 6)
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.addArrangedSubview(title)
+        container.addArrangedSubview(NSView())
+        container.addArrangedSubview(health)
+        container.addArrangedSubview(self.temperatureField)
+        
+        self.separator.wantsLayer = true
+        self.separator.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.15).cgColor
+        self.separator.translatesAutoresizingMaskIntoConstraints = false
+        self.separator.isHidden = true
+        
+        self.addSubview(container)
+        self.addSubview(self.separator)
+        NSLayoutConstraint.activate([
+            container.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            container.topAnchor.constraint(equalTo: self.topAnchor),
+            container.bottomAnchor.constraint(equalTo: self.bottomAnchor),
+            self.separator.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 6),
+            self.separator.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -6),
+            self.separator.topAnchor.constraint(equalTo: self.topAnchor),
+            self.separator.heightAnchor.constraint(equalToConstant: 1)
+        ])
+        
+        self.update(d)
     }
     
-    public func update(_ drive: drive) {
-        if self.nameField.title != drive.mediaName {
-            self.nameField.title = drive.mediaName
-            self.nameField.toolTip = drive.mediaName
-        }
-        let fs = drive.fileSystem.uppercased()
-        if self.fileSystemField.stringValue != fs {
-            self.fileSystemField.stringValue = fs
-        }
-        self.ejectButton.isEnabled = drive.removable && drive.path != nil
-        self.capacityField.update(free: drive.free)
-        self.bar.setValue(ColorValue(drive.percentage, color: drive.percentage.usageColor()))
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
     
-    @objc private func openDisk() {
-        if let uri = self.uri, let finder = self.finder {
-            NSWorkspace.shared.open([uri], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration())
-        }
+    override func updateLayer() {
+        self.layer?.backgroundColor = self.selected ? NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor : NSColor.clear.cgColor
     }
     
-    @objc private func ejectDisk() {
-        guard let uri = self.uri else { return }
-        do {
-            try NSWorkspace.shared.unmountAndEjectDevice(at: uri)
-        } catch let err {
-            error("failed to eject \(uri.path): \(err.localizedDescription)")
+    // the row is one click target, the labels inside must not swallow the event
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let superview = self.superview else { return nil }
+        return self.bounds.contains(self.convert(point, from: superview)) ? self : nil
+    }
+    
+    override func mouseDown(with event: NSEvent) {
+        self.clickCallback?(self.id)
+    }
+    
+    public func showSeparator(_ newValue: Bool) {
+        guard self.separator.isHidden == newValue else { return }
+        self.separator.isHidden = !newValue
+    }
+    
+    public func setSelected(_ newValue: Bool) {
+        guard self.selected != newValue else { return }
+        self.selected = newValue
+        self.needsDisplay = true
+    }
+    
+    public func update(_ d: physicalDrive) {
+        let model = "\(d.model) · \(DiskSize(d.size).getReadableMemory())"
+        if self.modelField.stringValue != model {
+            self.modelField.stringValue = model
         }
+        
+        guard let smart = d.smart else {
+            self.healthField.stringValue = localizedString("Unavailable")
+            self.temperatureField.stringValue = "-"
+            self.bar.setValue(ColorValue(0))
+            return
+        }
+        
+        self.healthField.stringValue = "\(localizedString("Health")): \(smart.life)%"
+        self.temperatureField.stringValue = temperature(Double(smart.temperature))
+        self.temperatureField.textColor = smart.temperature >= 70 ? .systemRed : .textColor
+        // the bar tracks the health, so a full bar is a healthy drive
+        let life = Double(min(max(smart.life, 0), 100)) / 100
+        self.bar.setValue(ColorValue(life, color: (1 - life).usageColor()))
     }
 }
 

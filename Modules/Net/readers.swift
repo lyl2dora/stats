@@ -100,7 +100,7 @@ extension CWChannel {
 
 internal class UsageReader: Reader<Network_Usage>, CWEventDelegate {
     private var reachability: Reachability = Reachability(start: true)
-    private let variablesQueue = DispatchQueue(label: "eu.exelban.NetworkUsageReader")
+    private let variablesQueue = DispatchQueue(label: "zone.lyl.NetworkUsageReader")
     private var _usage: Network_Usage = Network_Usage()
     public var usage: Network_Usage {
         get { self.variablesQueue.sync { self._usage } }
@@ -160,7 +160,7 @@ internal class UsageReader: Reader<Network_Usage>, CWEventDelegate {
     
     private var lastDetailsReadTS: Date = .distantPast
     
-    private let detailsQueue = DispatchQueue(label: "eu.exelban.NetworkDetailsReader")
+    private let detailsQueue = DispatchQueue(label: "zone.lyl.NetworkDetailsReader")
     private var _detailsInProgress: Bool = false
     private var detailsInProgress: Bool {
         get { self.variablesQueue.sync { self._detailsInProgress } }
@@ -769,7 +769,7 @@ internal class ConnectivityReaderWrapper {
 
 // inspired by https://github.com/samiyr/SwiftyPing
 internal class ConnectivityReader: Reader<Network_Connectivity> {
-    private let variablesQueue = DispatchQueue(label: "eu.exelban.ConnectivityReaderQueue")
+    private let variablesQueue = DispatchQueue(label: "zone.lyl.ConnectivityReaderQueue")
     
     private let identifier = UInt16.random(in: 0..<UInt16.max)
     private var fingerprint: UUID = UUID()

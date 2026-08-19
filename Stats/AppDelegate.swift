@@ -22,7 +22,7 @@ import Bluetooth
 import Clock
 import Remote
 
-let updater = Updater(github: "exelban/stats", url: "https://api.mac-stats.com/release/latest")
+let updater = Updater(github: "lyl2dora/stats", url: "https://api.github.com/repos/lyl2dora/stats/releases/latest")
 var modules: [Module] = [
     CPU(),
     GPU(),
@@ -47,9 +47,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     internal var combinedView: CombinedView = CombinedView()
     internal var modulesMounted: Bool = false
     
-    internal let updateActivity = NSBackgroundActivityScheduler(identifier: "eu.exelban.Stats.updateCheck")
-    internal let supportActivity = NSBackgroundActivityScheduler(identifier: "eu.exelban.Stats.support")
-    internal let supportRetryActivity = NSBackgroundActivityScheduler(identifier: "eu.exelban.Stats.supportRetry")
+    internal let updateActivity = NSBackgroundActivityScheduler(identifier: "zone.lyl.stats.updateCheck")
+    internal let supportActivity = NSBackgroundActivityScheduler(identifier: "zone.lyl.stats.support")
+    internal let supportRetryActivity = NSBackgroundActivityScheduler(identifier: "zone.lyl.stats.supportRetry")
     
     internal var clickInNotification: Bool = false
     

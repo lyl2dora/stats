@@ -65,7 +65,7 @@ public struct GPU_Info: Codable {
 }
 
 public class GPUs: Codable, RemoteType {
-    private var queue: DispatchQueue = DispatchQueue(label: "eu.exelban.Stats.GPU.SynchronizedArray")
+    private var queue: DispatchQueue = DispatchQueue(label: "zone.lyl.stats.GPU.SynchronizedArray")
     
     private var _list: [GPU_Info] = []
     public var list: [GPU_Info] {

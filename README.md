@@ -25,9 +25,9 @@ sh /Applications/Stats.app/Contents/Resources/Scripts/uninstall.sh
 ```
 The script quits Stats and removes:
 
-   - the SMC helper (`/Library/LaunchDaemons/eu.exelban.Stats.SMC.Helper.plist` and `/Library/PrivilegedHelperTools/eu.exelban.Stats.SMC.Helper`)
+   - the SMC helper (`/Library/LaunchDaemons/zone.lyl.stats.SMC.Helper.plist` and `/Library/PrivilegedHelperTools/zone.lyl.stats.SMC.Helper`)
    - `Stats.app`
-   - application data and preferences (`~/Library/Application Support/Stats`, widget containers, and `eu.exelban.Stats` defaults)
+   - application data and preferences (`~/Library/Application Support/Stats`, widget containers, and `zone.lyl.stats` defaults)
 
 If the app has already been moved to the Trash, the script can be run directly from the repository:
 ```bash

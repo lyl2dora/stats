@@ -202,6 +202,7 @@
 "One row" = "Μια σειρά";
 "Two rows" = "Δυο σειρές";
 "Mini widget" = "Μίνι";
+"Drive widget" = "Drive";
 "Line chart widget" = "Γραμμικό διάγραμμα";
 "Bar chart widget" = "Ραβδόγραμμα";
 "Pie chart widget" = "Διάγραμμα πίτας";
@@ -346,6 +347,16 @@
 "Encrypted" = "Κρυπτογραφημένο"; // gemma4:31b-it-qat
 "Writable" = "Γράψιμος"; // gemma4:31b-it-qat
 "Drives" = "Δίσκοι"; // translategemma:4b
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "SMART δεδομένα"; // gemma4:31b
 "ATA SMART data" = "Δεδομένα ATA SMART"; // gemma4:31b
 "Power cycles" = "Κύκλοι φόρτισης"; // gemma4:31b

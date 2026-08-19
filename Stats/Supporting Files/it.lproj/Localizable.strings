@@ -202,6 +202,7 @@
 "One row" = "Una riga";
 "Two rows" = "Due righe";
 "Mini widget" = "Mini";
+"Drive widget" = "Drive";
 "Line chart widget" = "Grafico a linee";
 "Bar chart widget" = "Grafico a barre";
 "Pie chart widget" = "Grafico a torta";
@@ -346,6 +347,16 @@
 "Encrypted" = "Criptato"; // gemma4:31b-it-qat
 "Writable" = "Scrivibile"; // gemma4:31b-it-qat
 "Drives" = "Dischi"; // translategemma:4b
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "Dati SMART"; // translategemma:4b
 "ATA SMART data" = "Dati ATA SMART"; // gemma4:31b
 "Power cycles" = "Numero di cicli"; // gemma4:31b

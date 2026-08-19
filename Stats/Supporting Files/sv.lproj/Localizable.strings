@@ -202,6 +202,7 @@
 "One row" = "En rad";
 "Two rows" = "Två rader";
 "Mini widget" = "Mini";
+"Drive widget" = "Drive";
 "Line chart widget" = "Linjediagram";
 "Bar chart widget" = "Stapeldiagram";
 "Pie chart widget" = "Cirkeldiagram";
@@ -346,6 +347,16 @@
 "Encrypted" = "Krypterad"; // gemma4:31b-it-qat
 "Writable" = "Skrivbar"; // gemma4:31b-it-qat
 "Drives" = "Diskar"; // gemma4:31b
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "SMART-data"; // translategemma:4b
 "ATA SMART data" = "ATA SMART-data"; // gemma4:31b
 "Power cycles" = "Antal cykler"; // gemma4:31b

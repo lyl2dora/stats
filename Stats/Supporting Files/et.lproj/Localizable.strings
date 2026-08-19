@@ -202,6 +202,7 @@
 "One row" = "Üks rida";
 "Two rows" = "Kaks read";
 "Mini widget" = "Väike vidin";
+"Drive widget" = "Drive";
 "Line chart widget" = "Joonediagramm";
 "Bar chart widget" = "Tulpdiagramm";
 "Pie chart widget" = "Sektordiagramm";
@@ -346,6 +347,16 @@
 "Encrypted" = "Krüpteeritud"; // gemma4:31b-it-qat
 "Writable" = "Kirjutatav"; // gemma4:31b-it-qat
 "Drives" = "Kettad";
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "SMART-andmed";
 "ATA SMART data" = "ATA SMART andmed"; // gemma4:31b
 "Power cycles" = "Toitetsüklid"; // gemma4:31b

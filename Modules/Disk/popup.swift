@@ -45,8 +45,17 @@ internal class Popup: PopupWrapper {
     private var processes: ProcessesView? = nil
     private var processesView: NSView? = nil
     
+    private var physicalDisks: NSStackView = {
+        let view = NSStackView()
+        view.spacing = Constants.Popup.margins
+        view.orientation = .vertical
+        return view
+    }()
+    
     private let settingsSection = PreferencesSection(title: localizedString("Drives"))
+    private let physicalSettingsSection = PreferencesSection(title: localizedString("Physical drives"))
     private var lastList: [String] = []
+    private var lastPhysicalList: [String] = []
     
     public init(_ module: ModuleType) {
         super.init(module, frame: NSRect(x: 0, y: 0, width: Constants.Popup.width, height: 0))
@@ -61,6 +70,7 @@ internal class Popup: PopupWrapper {
         self.spacing = 0
         
         self.addArrangedSubview(self.disks)
+        self.addArrangedSubview(self.physicalDisks)
         self.addArrangedSubview(self.initProcesses())
         
         self.recalculateHeight()
@@ -72,12 +82,18 @@ internal class Popup: PopupWrapper {
     
     private func recalculateHeight() {
         var h: CGFloat = 0
-        h += self.disks.subviews.map({ $0.frame.height + self.disks.spacing }).reduce(0, +) - self.disks.spacing
+        h += self.stackHeight(self.disks)
+        h += self.stackHeight(self.physicalDisks)
         h += self.processesHeight
         if h > 0 && self.frame.size.height != h {
             self.setFrameSize(NSSize(width: self.frame.width, height: h))
             self.sizeCallback?(self.frame.size)
         }
+    }
+    
+    private func stackHeight(_ view: NSStackView) -> CGFloat {
+        guard !view.subviews.isEmpty else { return 0 }
+        return view.subviews.map({ $0.frame.height + view.spacing }).reduce(0, +) - view.spacing
     }
     
     private func initProcesses() -> NSView {
@@ -105,6 +121,7 @@ internal class Popup: PopupWrapper {
     
     public override func appear() {
         self.disks.subviews.compactMap { $0 as? DiskView }.forEach { $0.appear() }
+        self.physicalDisks.subviews.compactMap { $0 as? PhysicalView }.forEach { $0.appear() }
     }
     
     internal func capacityCallback(_ value: Disks) {
@@ -148,6 +165,47 @@ internal class Popup: PopupWrapper {
                 self.disks.addArrangedSubview(DiskView(
                     width: Constants.Popup.width,
                     drive: drive,
+                    resize: self.recalculateHeight
+                ))
+            }
+        }
+    }
+    
+    internal func smartCallback(_ value: [physicalDrive]) {
+        defer {
+            let h = self.stackHeight(self.physicalDisks)
+            if self.physicalDisks.frame.size.height != h {
+                self.physicalDisks.setFrameSize(NSSize(width: self.frame.width, height: max(0, h)))
+                self.recalculateHeight()
+            }
+            self.lastPhysicalList = value.map { $0.id }
+        }
+        
+        self.lastPhysicalList.filter { !value.map({ $0.id }).contains($0) }.forEach { self.physicalSettingsSection.delete($0) }
+        value.forEach { (d: physicalDrive) in
+            if !self.physicalSettingsSection.contains(d.id) {
+                let btn = switchView(
+                    action: #selector(self.togglePhysicalDisk),
+                    state: d.popupState
+                )
+                btn.identifier = NSUserInterfaceItemIdentifier(d.id)
+                self.physicalSettingsSection.add(PreferencesRow("\(d.name) (\(d.model))", id: d.id, component: btn))
+            }
+        }
+        
+        let visible = value.filter({ $0.popupState })
+        self.physicalDisks.subviews.compactMap { $0 as? PhysicalView }.forEach { (v: PhysicalView) in
+            if !visible.map({ $0.id }).contains(v.id) {
+                v.removeFromSuperview()
+            }
+        }
+        visible.forEach { (d: physicalDrive) in
+            if let view = self.physicalDisks.subviews.compactMap({ $0 as? PhysicalView }).first(where: { $0.id == d.id }) {
+                view.update(d)
+            } else {
+                self.physicalDisks.addArrangedSubview(PhysicalView(
+                    width: Constants.Popup.width,
+                    drive: d,
                     resize: self.recalculateHeight
                 ))
             }
@@ -236,6 +294,7 @@ internal class Popup: PopupWrapper {
         empty.identifier = NSUserInterfaceItemIdentifier("empty_view")
         self.settingsSection.add(empty)
         view.addArrangedSubview(self.settingsSection)
+        view.addArrangedSubview(self.physicalSettingsSection)
         
         return view
     }
@@ -278,6 +337,10 @@ internal class Popup: PopupWrapper {
     @objc private func toggleDisk(_ sender: NSControl) {
         guard let id = sender.identifier else { return }
         Store.shared.set(key: "\(self.title)_\(id.rawValue)_popup", value: controlState(sender))
+    }
+    @objc private func togglePhysicalDisk(_ sender: NSControl) {
+        guard let id = sender.identifier else { return }
+        Store.shared.set(key: "\(self.title)_physical_\(id.rawValue)_popup", value: controlState(sender))
     }
 }
 
@@ -881,5 +944,263 @@ internal class DetailsView: NSStackView {
     public func appear() {
         self.statsCache.replay(render: self.renderStats)
         self.smartCache.replay(render: self.renderSmart)
+    }
+}
+
+// A physical drive row. Same shell as DiskView, but a drive has no file system to report on, so the
+// capacity chart gives way to the values that only exist at the device level.
+internal class PhysicalView: NSStackView {
+    internal var sizeCallback: (() -> Void) = {}
+    
+    public let id: String
+    
+    private let temperatureField: ValueField = ValueField("")
+    private let healthField: ValueField = ValueField("")
+    private let detailsView: PhysicalDetailsView
+    
+    private let cache = PopupCache<physicalDrive>()
+    
+    private var detailsState: Bool {
+        get { Store.shared.bool(key: "\(self.id)_physicalDetails", defaultValue: false) }
+        set { Store.shared.set(key: "\(self.id)_physicalDetails", value: newValue) }
+    }
+    
+    init(width: CGFloat, drive d: physicalDrive, resize: @escaping () -> Void) {
+        self.sizeCallback = resize
+        self.id = d.id
+        let innerWidth: CGFloat = width - (Constants.Popup.margins * 2)
+        self.detailsView = PhysicalDetailsView(width: innerWidth)
+        
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 0))
+        
+        self.widthAnchor.constraint(equalToConstant: width).isActive = true
+        self.orientation = .vertical
+        self.distribution = .fillProportionally
+        self.spacing = Constants.Popup.margins
+        self.edgeInsets = NSEdgeInsets(top: Constants.Popup.margins, left: 0, bottom: Constants.Popup.margins, right: 0)
+        self.wantsLayer = true
+        self.layer?.cornerRadius = Constants.Popup.radius
+        
+        self.addArrangedSubview(self.header(width: innerWidth, drive: d))
+        self.addArrangedSubview(self.detailsView)
+        
+        self.update(d)
+        self.toggleDetails()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func updateLayer() {
+        self.layer?.backgroundColor = (isDarkMode ? NSColor(red: 17/255, green: 17/255, blue: 17/255, alpha: 0.25) : NSColor(red: 245/255, green: 245/255, blue: 245/255, alpha: 1)).cgColor
+    }
+    
+    private func header(width: CGFloat, drive d: physicalDrive) -> NSView {
+        let view = NSStackView(frame: NSRect(x: 0, y: 0, width: width, height: 16))
+        view.orientation = .horizontal
+        view.alignment = .centerY
+        view.spacing = 6
+        
+        let nameField = LabelField(d.name)
+        nameField.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        nameField.textColor = .textColor
+        nameField.toolTip = "\(d.model) · \(d.serial)"
+        
+        self.temperatureField.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        self.temperatureField.toolTip = localizedString("Temperature")
+        self.healthField.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        self.healthField.textColor = .secondaryLabelColor
+        self.healthField.toolTip = localizedString("Health")
+        
+        let detailsButton = PopupButton(toolTip: localizedString("Disk details"), state: self.detailsState) { [weak self] in
+            guard let s = self else { return }
+            s.detailsState = !s.detailsState
+            s.toggleDetails()
+        }
+        
+        view.addArrangedSubview(nameField)
+        view.addArrangedSubview(NSView())
+        view.addArrangedSubview(self.temperatureField)
+        view.addArrangedSubview(self.healthField)
+        view.addArrangedSubview(detailsButton)
+        
+        view.widthAnchor.constraint(equalToConstant: width).isActive = true
+        view.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        
+        return view
+    }
+    
+    public func update(_ value: physicalDrive) {
+        self.cache.apply(value, visible: self.window?.isVisible ?? false, render: self.render)
+    }
+    
+    private func render(_ value: physicalDrive) {
+        if let smart = value.smart {
+            self.temperatureField.stringValue = temperature(Double(smart.temperature))
+            self.temperatureField.textColor = smart.temperature >= 70 ? .systemRed : .textColor
+            self.healthField.stringValue = "\(smart.life)%"
+        } else {
+            self.temperatureField.stringValue = "-"
+            self.temperatureField.textColor = .textColor
+            self.healthField.stringValue = "-"
+        }
+        self.detailsView.update(value)
+    }
+    
+    public func appear() {
+        self.cache.replay(render: self.render)
+        self.detailsView.appear()
+    }
+    
+    private func toggleDetails() {
+        if self.detailsState {
+            self.addArrangedSubview(self.detailsView)
+        } else {
+            self.detailsView.removeFromSuperview()
+        }
+        
+        let h = self.arrangedSubviews.map({ $0.bounds.height + self.spacing }).reduce(0, +) - 5 + (Constants.Popup.margins*2)
+        self.setFrameSize(NSSize(width: self.frame.width, height: h))
+        self.sizeCallback()
+    }
+}
+
+internal class PhysicalDetailsView: NSStackView {
+    private var detailsHeight: CGFloat {
+        (22*4) + Constants.Popup.separatorHeight
+    }
+    private var smartHeight: CGFloat {
+        (22*6) + Constants.Popup.separatorHeight
+    }
+    
+    private var modelValueField: ValueField?
+    private var serialValueField: ValueField?
+    private var connectionTypeValueField: ValueField?
+    private var capacityValueField: ValueField?
+    
+    private var totalReadValueField: ValueField?
+    private var totalWrittenValueField: ValueField?
+    private var powerOnHoursValueField: ValueField?
+    private var powerCyclesValueField: ValueField?
+    private var availableSpareValueField: ValueField?
+    private var criticalWarningValueField: ValueField?
+    
+    private let cache = PopupCache<physicalDrive>()
+    
+    public init(width: CGFloat) {
+        super.init(frame: CGRect(x: 0, y: 0, width: width, height: 0))
+        
+        self.orientation = .vertical
+        self.distribution = .fillProportionally
+        self.spacing = 0
+        
+        self.addArrangedSubview(self.initDetails())
+        self.addArrangedSubview(self.initSmart())
+        
+        self.setFrameSize(NSSize(width: width, height: self.detailsHeight + self.smartHeight))
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    private func initDetails() -> NSView {
+        let view: NSView = NSView(frame: NSRect(x: 0, y: 0, width: self.frame.width, height: self.detailsHeight))
+        view.widthAnchor.constraint(equalToConstant: view.bounds.width).isActive = true
+        view.heightAnchor.constraint(equalToConstant: view.bounds.height).isActive = true
+        let separator = separatorView(localizedString("Details"), origin: NSPoint(x: 0, y: self.detailsHeight-Constants.Popup.separatorHeight), width: self.frame.width)
+        let container: NSStackView = NSStackView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: separator.frame.origin.y))
+        container.orientation = .vertical
+        container.spacing = 0
+        
+        self.modelValueField = popupRow(container, title: "\(localizedString("Model")):", value: localizedString("Unknown")).1
+        self.serialValueField = popupRow(container, title: "\(localizedString("Serial number")):", value: localizedString("Unknown")).1
+        self.capacityValueField = popupRow(container, title: "\(localizedString("Capacity")):", value: localizedString("Unknown")).1
+        self.connectionTypeValueField = popupRow(container, title: "\(localizedString("Connection type")):", value: localizedString("Unknown")).1
+        
+        [self.modelValueField, self.serialValueField, self.capacityValueField, self.connectionTypeValueField].forEach {
+            $0?.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        }
+        
+        view.addSubview(separator)
+        view.addSubview(container)
+        
+        return view
+    }
+    
+    private func initSmart() -> NSView {
+        let view: NSView = NSView(frame: NSRect(x: 0, y: 0, width: self.frame.width, height: self.smartHeight))
+        view.widthAnchor.constraint(equalToConstant: view.bounds.width).isActive = true
+        view.heightAnchor.constraint(equalToConstant: view.bounds.height).isActive = true
+        let separator = separatorView(localizedString("SMART"), origin: NSPoint(x: 0, y: self.smartHeight-Constants.Popup.separatorHeight), width: self.frame.width)
+        let container: NSStackView = NSStackView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: separator.frame.origin.y))
+        container.orientation = .vertical
+        container.spacing = 0
+        
+        self.totalReadValueField = popupRow(container, title: "\(localizedString("Total read")):", value: localizedString("Unavailable")).1
+        self.totalWrittenValueField = popupRow(container, title: "\(localizedString("Total written")):", value: localizedString("Unavailable")).1
+        self.powerOnHoursValueField = popupRow(container, title: "\(localizedString("Power on hours")):", value: localizedString("Unavailable")).1
+        self.powerCyclesValueField = popupRow(container, title: "\(localizedString("Power cycles")):", value: localizedString("Unavailable")).1
+        self.availableSpareValueField = popupRow(container, title: "\(localizedString("Available spare")):", value: localizedString("Unavailable")).1
+        self.criticalWarningValueField = popupRow(container, title: "\(localizedString("Critical warning")):", value: localizedString("Unavailable")).1
+        
+        [self.totalReadValueField, self.totalWrittenValueField, self.powerOnHoursValueField,
+         self.powerCyclesValueField, self.availableSpareValueField, self.criticalWarningValueField].forEach {
+            $0?.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        }
+        
+        view.addSubview(separator)
+        view.addSubview(container)
+        
+        return view
+    }
+    
+    public func update(_ value: physicalDrive) {
+        self.cache.apply(value, visible: self.window?.isVisible ?? false, render: self.render)
+    }
+    
+    private func render(_ d: physicalDrive) {
+        self.modelValueField?.stringValue = d.model.isEmpty ? localizedString("Unknown") : d.model
+        self.serialValueField?.stringValue = d.serial.isEmpty ? localizedString("Unknown") : d.serial
+        self.capacityValueField?.stringValue = DiskSize(d.size).getReadableMemory()
+        self.connectionTypeValueField?.stringValue = d.connectionType.isEmpty ? localizedString("Unknown") : d.connectionType
+        
+        guard let smart = d.smart else {
+            [self.totalReadValueField, self.totalWrittenValueField, self.powerOnHoursValueField,
+             self.powerCyclesValueField, self.availableSpareValueField, self.criticalWarningValueField].forEach {
+                $0?.stringValue = localizedString("Unavailable")
+                $0?.textColor = .textColor
+            }
+            return
+        }
+        
+        self.totalReadValueField?.stringValue = Units(bytes: smart.totalRead).getReadableMemory()
+        self.totalWrittenValueField?.stringValue = Units(bytes: smart.totalWritten).getReadableMemory()
+        self.powerOnHoursValueField?.stringValue = "\(smart.powerOnHours)"
+        self.powerCyclesValueField?.stringValue = "\(smart.powerCycles)"
+        
+        if let spare = smart.availableSpare {
+            self.availableSpareValueField?.stringValue = "\(spare)%"
+            if let threshold = smart.spareThreshold {
+                self.availableSpareValueField?.textColor = spare < threshold ? .systemRed : .textColor
+                self.availableSpareValueField?.toolTip = "\(localizedString("Threshold")): \(threshold)%"
+            }
+        } else {
+            self.availableSpareValueField?.stringValue = localizedString("Unavailable")
+        }
+        
+        if let warning = smart.criticalWarning {
+            let list = smartCriticalWarnings(warning)
+            self.criticalWarningValueField?.stringValue = list.isEmpty ? localizedString("None") : list.joined(separator: ", ")
+            self.criticalWarningValueField?.textColor = list.isEmpty ? .textColor : .systemRed
+        } else {
+            self.criticalWarningValueField?.stringValue = localizedString("Unavailable")
+            self.criticalWarningValueField?.textColor = .textColor
+        }
+    }
+    
+    public func appear() {
+        self.cache.replay(render: self.render)
     }
 }

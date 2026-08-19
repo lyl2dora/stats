@@ -132,6 +132,41 @@
 			<key>Order</key>
 			<integer>7</integer>
 		</dict>
+		<key>drive_mini</key>
+		<dict>
+			<key>Default</key>
+			<false/>
+			<key>Title</key>
+			<string>SSD</string>
+			<key>Label</key>
+			<true/>
+			<key>Preview</key>
+			<dict>
+				<key>Title</key>
+				<string>SSD</string>
+				<key>Value</key>
+				<string>0.49</string>
+			</dict>
+			<key>Unsupported colors</key>
+			<array>
+				<string>pressure</string>
+				<string>cluster</string>
+			</array>
+			<key>Order</key>
+			<integer>9</integer>
+		</dict>
+		<key>sensors</key>
+		<dict>
+			<key>Default</key>
+			<false/>
+			<key>Preview</key>
+			<dict>
+				<key>Values</key>
+				<string>49°,99%</string>
+			</dict>
+			<key>Order</key>
+			<integer>8</integer>
+		</dict>
 	</dict>
 	<key>Settings</key>
 	<dict>

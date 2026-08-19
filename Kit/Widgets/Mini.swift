@@ -37,7 +37,7 @@ public class Mini: WidgetWrapper {
         return .left
     }
     
-    public init(title: String, config: NSDictionary?, preview: Bool = false) {
+    public init(title: String, config: NSDictionary?, preview: Bool = false, type: widget_t = .mini) {
         var widgetTitle: String = title
         if config != nil {
             var configuration = config!
@@ -69,7 +69,7 @@ public class Mini: WidgetWrapper {
         
         self.defaultLabel = widgetTitle
         self._label = widgetTitle
-        super.init(.mini, title: widgetTitle, frame: CGRect(
+        super.init(type, title: widgetTitle, frame: CGRect(
             x: 0,
             y: Constants.Widget.margin.y,
             width: Constants.Widget.width + (2*Constants.Widget.margin.x),

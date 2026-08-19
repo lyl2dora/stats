@@ -2,7 +2,7 @@
 
 set -u
 
-HELPER_LABEL="eu.exelban.Stats.SMC.Helper"
+HELPER_LABEL="zone.lyl.stats.SMC.Helper"
 
 if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
     HOME=$(dscl . -read "/Users/$SUDO_USER" NFSHomeDirectory | awk '{print $2}')
@@ -35,12 +35,12 @@ done
 
 echo "Removing application data and preferences..."
 rm -rf "$HOME/Library/Application Support/Stats"
-rm -rf "$HOME/Library/Containers/eu.exelban.Stats.Widgets"
-rm -rf "$HOME/Library/Group Containers/"*.eu.exelban.Stats.widgets
-run_as_user defaults delete eu.exelban.Stats >/dev/null 2>&1 || true
-run_as_user defaults delete eu.exelban.Stats.Widgets >/dev/null 2>&1 || true
-rm -f "$HOME/Library/Preferences/eu.exelban.Stats.plist"
-rm -f "$HOME/Library/Preferences/eu.exelban.Stats.Widgets.plist"
+rm -rf "$HOME/Library/Containers/zone.lyl.stats.Widgets"
+rm -rf "$HOME/Library/Group Containers/"*.zone.lyl.stats.widgets
+run_as_user defaults delete zone.lyl.stats >/dev/null 2>&1 || true
+run_as_user defaults delete zone.lyl.stats.Widgets >/dev/null 2>&1 || true
+rm -f "$HOME/Library/Preferences/zone.lyl.stats.plist"
+rm -f "$HOME/Library/Preferences/zone.lyl.stats.Widgets.plist"
 
 echo "Stats has been uninstalled."
 echo "If fan speeds were controlled manually, they will return to automatic control after a reboot."

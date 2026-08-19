@@ -15,7 +15,7 @@ public class DB {
     public static let shared = DB()
     
     private var lldb: LLDB? = nil
-    private let queue = DispatchQueue(label: "eu.exelban.db")
+    private let queue = DispatchQueue(label: "zone.lyl.db")
     private let ttl: Int = 60*60
     
     public var _writeTS: [String: Date] = [:]

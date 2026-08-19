@@ -14,6 +14,7 @@ import Cocoa
 public enum widget_t: String {
     case unknown = ""
     case mini = "mini"
+    case driveMini = "drive_mini"
     case lineChart = "line_chart"
     case barChart = "bar_chart"
     case pieChart = "pie_chart"
@@ -39,6 +40,9 @@ public enum widget_t: String {
         case .mini:
             preview = Mini(title: module, config: widgetConfig, preview: true)
             item = Mini(title: module, config: widgetConfig, preview: false)
+        case .driveMini:
+            preview = Mini(title: module, config: widgetConfig, preview: true, type: .driveMini)
+            item = Mini(title: module, config: widgetConfig, preview: false, type: .driveMini)
         case .lineChart:
             preview = LineChart(title: module, config: widgetConfig, preview: true)
             item = LineChart(title: module, config: widgetConfig, preview: false)
@@ -129,6 +133,7 @@ public enum widget_t: String {
     public func name() -> String {
         switch self {
         case .mini: return localizedString("Mini widget")
+        case .driveMini: return localizedString("Drive widget")
         case .lineChart: return localizedString("Line chart widget")
         case .barChart: return localizedString("Bar chart widget")
         case .pieChart: return localizedString("Pie chart widget")
@@ -167,7 +172,7 @@ open class WidgetWrapper: NSView, widget_p {
         self.type = type
         self.title = title
         self.shadowSize = frame.size
-        self.queue = DispatchQueue(label: "eu.exelban.Stats.WidgetWrapper.\(type.rawValue).\(title)")
+        self.queue = DispatchQueue(label: "zone.lyl.stats.WidgetWrapper.\(type.rawValue).\(title)")
         
         super.init(frame: frame)
     }
@@ -410,7 +415,7 @@ public class MenuBar {
     
     init(moduleName: String) {
         self.moduleName = moduleName
-        self.queue = DispatchQueue(label: "eu.exelban.Stats.MenuBar.\(moduleName)")
+        self.queue = DispatchQueue(label: "zone.lyl.stats.MenuBar.\(moduleName)")
         self.oneView = Store.shared.bool(key: "\(self.moduleName)_oneView", defaultValue: self.oneView)
         self.view.identifier = NSUserInterfaceItemIdentifier(rawValue: moduleName)
         

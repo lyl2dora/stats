@@ -202,6 +202,7 @@
 "One row" = "หนึ่งแถว";
 "Two rows" = "สองแถว";
 "Mini widget" = "วิดเจ็ตขนาดเล็ก";
+"Drive widget" = "Drive";
 "Line chart widget" = "แผนภูมิเส้น";
 "Bar chart widget" = "แผนภูมิแท่ง";
 "Pie chart widget" = "แผนภูมิวงกลม";
@@ -346,6 +347,16 @@
 "Encrypted" = "เข้ารหัสแล้ว"; // gemma4:31b-it-qat
 "Writable" = "เขียนได้"; // gemma4:31b-it-qat
 "Drives" = "ไดรฟ์"; // gemma4:31b
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "ข้อมูล SMART"; // translategemma:4b
 "ATA SMART data" = "ข้อมูล ATA SMART"; // gemma4:31b
 "Power cycles" = "จำนวนรอบการชาร์จ"; // gemma4:31b

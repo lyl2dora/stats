@@ -202,6 +202,7 @@
 "One row" = "Một hàng";
 "Two rows" = "Hai hàng";
 "Mini widget" = "Widget nhỏ";
+"Drive widget" = "Drive";
 "Line chart widget" = "Biểu đồ đường";
 "Bar chart widget" = "Biểu đồ cột";
 "Pie chart widget" = "Biểu đồ tròn";
@@ -346,6 +347,16 @@
 "Encrypted" = "Đã mã hóa"; // gemma4:31b-it-qat
 "Writable" = "Có thể ghi"; // gemma4:31b-it-qat
 "Drives" = "Ổ đĩa";
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "Dữ liệu SMART";
 "ATA SMART data" = "Dữ liệu ATA SMART"; // gemma4:31b
 "Power cycles" = "Số chu kỳ sạc"; // gemma4:31b

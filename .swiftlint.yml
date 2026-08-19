@@ -51,6 +51,7 @@ identifier_name:
     - expires_in
     - NetworkSpeedUnitAuto
     - NetworkSpeedUnits
+    - SmartValues
 
 line_length: 200
 

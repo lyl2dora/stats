@@ -15,7 +15,7 @@ import Kit
 internal class ClockReader: Reader<Date> {
     private let title: String = ModuleType.clock.stringValue
     
-    private let queue = DispatchQueue(label: "eu.exelban.Stats.Clock.ntp.sync", qos: .default)
+    private let queue = DispatchQueue(label: "zone.lyl.stats.Clock.ntp.sync", qos: .default)
     private var _offset: TimeInterval = 0
     private var offset: TimeInterval {
         get { self.queue.sync { self._offset } }

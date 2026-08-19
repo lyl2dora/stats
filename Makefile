@@ -1,27 +1,41 @@
 APP = Stats
-BUNDLE_ID = eu.exelban.$(APP)
+BUNDLE_ID = zone.lyl.$(APP)
+
+# Notarization credentials live outside the repo. Expected keys:
+#   APPLE_API_KEY_ID, APPLE_API_ISSUER, APPLE_API_KEY (base64 of the App Store Connect .p8)
+ENV_FILE ?= $(PWD)/../.env
+
+# Materialises the .p8 into a private temp file that is removed when the recipe's shell exits.
+# On CI the variables come straight from the environment and there is no env file to read.
+ASC_KEY = if [ -f "$(ENV_FILE)" ]; then set -a; eval "$$(tr -d '\r' < "$(ENV_FILE)")"; set +a; fi ;\
+	umask 077 ;\
+	keyPath=$$(mktemp -t stats_asc_key) ;\
+	trap 'rm -f "$$keyPath"' EXIT ;\
+	printf '%s' "$$APPLE_API_KEY" | base64 --decode > "$$keyPath"
+NOTARY_AUTH = --key "$$keyPath" --key-id "$$APPLE_API_KEY_ID" --issuer "$$APPLE_API_ISSUER"
 
 BUILD_PATH = $(PWD)/build
 APP_PATH = "$(BUILD_PATH)/$(APP).app"
 ZIP_PATH = "$(BUILD_PATH)/$(APP).zip"
 WIDGET_PATH = "$(BUILD_PATH)/$(APP).app/Contents/PlugIns/WidgetsExtension.appex"
 
-.SILENT: archive notarize sign verify prepare-dmg prepare-dSYM clean next-version check history disk smc leveldb
-.PHONY: build archive notarize sign verify prepare-dmg prepare-dSYM clean next-version check history open smc leveldb
+.SILENT: archive notarize sign verify sign-dmg prepare-dmg prepare-dSYM clean next-version check history disk smc leveldb
+.PHONY: build archive notarize sign verify sign-dmg prepare-dmg prepare-dSYM clean next-version check history open smc leveldb
 
 build: clean next-version archive notarize sign verify prepare-dmg prepare-dSYM open
 
 # --- MAIN WORLFLOW FUNCTIONS --- #
 
 archive: clean
-	osascript -e 'display notification "Exporting application archive..." with title "Build the Stats"'
+	-osascript -e 'display notification "Exporting application archive..." with title "Build the Stats"'
 	echo "Exporting application archive..."
 
 	xcodebuild \
   		-scheme $(APP) \
-  		-destination 'platform=OS X,arch=x86_64' \
+  		-destination 'platform=OS X,arch=arm64' \
   		-configuration Release archive \
-  		-archivePath $(BUILD_PATH)/$(APP).xcarchive
+  		-archivePath $(BUILD_PATH)/$(APP).xcarchive \
+  		ARCHS=arm64 ONLY_ACTIVE_ARCH=NO
 
 	echo "Application built, starting the export archive..."
 
@@ -35,21 +49,22 @@ archive: clean
 	echo "Project archived successfully"
 
 notarize:
-	osascript -e 'display notification "Submitting app for notarization..." with title "Build the Stats"'
+	-osascript -e 'display notification "Submitting app for notarization..." with title "Build the Stats"'
 	echo "Submitting app for notarization..."
 
-	xcrun notarytool submit --keychain-profile "AC_PASSWORD" --wait $(ZIP_PATH)
+	$(ASC_KEY) ;\
+	xcrun notarytool submit $(NOTARY_AUTH) --wait $(ZIP_PATH)
 
 	echo "Stats successfully notarized"
 
 sign:
-	osascript -e 'display notification "Stampling the Stats..." with title "Build the Stats"'
+	-osascript -e 'display notification "Stampling the Stats..." with title "Build the Stats"'
 	echo "Going to staple an application..."
 
 	xcrun stapler staple $(APP_PATH)
 	spctl -a -t exec -vvv $(APP_PATH)
 
-	osascript -e 'display notification "Stats successfully stapled" with title "Build the Stats"'
+	-osascript -e 'display notification "Stats successfully stapled" with title "Build the Stats"'
 	echo "Stats successfully stapled"
 
 verify:
@@ -102,6 +117,20 @@ prepare-dmg:
 
 	rm -rf ./create-dmg
 
+# Signs, notarises and staples the disk image itself, so a manually downloaded
+# image does not trip Gatekeeper on mount. The in-app updater does not need this:
+# it mounts the image and validates the app inside it.
+sign-dmg:
+	echo "Signing the disk image..."
+	codesign --force --sign "Developer ID Application" --timestamp $(PWD)/$(APP).dmg
+
+	$(ASC_KEY) ;\
+	xcrun notarytool submit $(NOTARY_AUTH) --wait $(PWD)/$(APP).dmg
+
+	xcrun stapler staple $(PWD)/$(APP).dmg
+	spctl -a -t open --context context:primary-signature -vv $(PWD)/$(APP).dmg
+	echo "Disk image signed and notarized"
+
 prepare-dSYM:
 	echo "Zipping dSYMs..."
 	cd $(BUILD_PATH)/Stats.xcarchive/dSYMs && zip -r $(PWD)/dSYMs.zip .
@@ -121,14 +150,17 @@ next-version:
 	echo "Next version is: $$versionNumber" ;\
 	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $$versionNumber" "$(PWD)/Stats/Supporting Files/Info.plist" ;\
 
+# usage: make check ID=<submission-uuid>
 check:
-	xcrun notarytool log 2d0045cc-8f0d-4f4c-ba6f-728895fd064a --keychain-profile "AC_PASSWORD"
+	$(ASC_KEY) ;\
+	xcrun notarytool log $(ID) $(NOTARY_AUTH)
 
 history:
-	xcrun notarytool history --keychain-profile "AC_PASSWORD"
+	$(ASC_KEY) ;\
+	xcrun notarytool history $(NOTARY_AUTH)
 
 open:
-	osascript -e 'display notification "Stats signed and ready for distribution" with title "Build the Stats"'
+	-osascript -e 'display notification "Stats signed and ready for distribution" with title "Build the Stats"'
 	echo "Opening working folder..."
 	open $(PWD)
 

@@ -202,6 +202,7 @@
 "One row" = "صف واحد";
 "Two rows" = "صفين";
 "Mini widget" = "مصغر";
+"Drive widget" = "Drive";
 "Line chart widget" = "مخطط خطي";
 "Bar chart widget" = "مخطط شريطي";
 "Pie chart widget" = "مخطط دائري";
@@ -346,6 +347,16 @@
 "Encrypted" = "مشفر"; // gemma4:31b-it-qat
 "Writable" = "قابل للكتابة"; // gemma4:31b-it-qat
 "Drives" = "محركات الأقراص"; // gemma4:31b
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "بيانات SMART"; // gemma4:31b
 "ATA SMART data" = "بيانات ATA SMART"; // gemma4:31b
 "Power cycles" = "دورات الطاقة"; // gemma4:31b

@@ -20,7 +20,7 @@ internal class Repeater {
     private var callback: (() -> Void)
     private var state: RepeaterState = .paused
     
-    private var timer: DispatchSourceTimer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "eu.exelban.Stats.Repeater", qos: .default))
+    private var timer: DispatchSourceTimer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "zone.lyl.stats.Repeater", qos: .default))
     
     internal init(seconds: Int, callback: @escaping (() -> Void)) {
         self.callback = callback

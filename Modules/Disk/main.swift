@@ -45,6 +45,73 @@ internal func smartCriticalWarnings(_ value: Int) -> [String] {
     return list
 }
 
+public struct physicalDrive: Codable {
+    var serial: String = ""
+    var model: String = ""
+    var BSDName: String = ""
+    
+    var size: Int64 = 0
+    var isInternal: Bool = true
+    var removable: Bool = false
+    var connectionType: String = ""
+    
+    // topology, used to derive a stable bay number inside an enclosure
+    var enclosure: String = ""
+    var slotPath: [Int] = []
+    var slot: Int = 0
+    
+    var smart: smart_t? = nil
+    var activity: stats = stats()
+    
+    // BSD names of every IOMedia living on this device, mounted or not
+    var media: [String] = []
+    
+    public var id: String {
+        self.serial.isEmpty ? self.BSDName : self.serial
+    }
+    
+    public var name: String {
+        if self.isInternal { return localizedString("Internal") }
+        return "\(localizedString("Drive")) \(self.slot)"
+    }
+    
+    public var popupState: Bool {
+        Store.shared.bool(key: "Disk_physical_\(self.id)_popup", defaultValue: true)
+    }
+    public var temperatureState: Bool {
+        Store.shared.bool(key: "Disk_physical_\(self.id)_temperature", defaultValue: false)
+    }
+    public var lifeState: Bool {
+        Store.shared.bool(key: "Disk_physical_\(self.id)_life", defaultValue: false)
+    }
+}
+
+// A volume can be spread over several drives. Reporting the hottest and the most worn of them keeps
+// the volume level numbers honest instead of silently picking whichever member came back first.
+internal func aggregateSMART(_ list: [physicalDrive]) -> smart_t? {
+    let values = list.compactMap({ $0.smart })
+    guard !values.isEmpty else { return nil }
+    guard values.count > 1 else { return values[0] }
+    
+    let warnings = values.compactMap({ $0.criticalWarning })
+    let shutdowns = values.compactMap({ $0.unsafeShutdowns })
+    let errors = values.compactMap({ $0.mediaErrors })
+    
+    return smart_t(
+        temperature: values.map({ $0.temperature }).max() ?? 0,
+        life: values.map({ $0.life }).min() ?? 0,
+        totalRead: values.reduce(0, { $0 + $1.totalRead }),
+        totalWritten: values.reduce(0, { $0 + $1.totalWritten }),
+        powerCycles: values.map({ $0.powerCycles }).max() ?? 0,
+        powerOnHours: values.map({ $0.powerOnHours }).max() ?? 0,
+        criticalWarning: warnings.isEmpty ? nil : warnings.reduce(0, { $0 | $1 }),
+        availableSpare: values.compactMap({ $0.availableSpare }).min(),
+        spareThreshold: values.compactMap({ $0.spareThreshold }).max(),
+        unsafeShutdowns: shutdowns.isEmpty ? nil : shutdowns.reduce(0, +),
+        mediaErrors: errors.isEmpty ? nil : errors.reduce(0, +)
+    )
+}
+
 public struct drive: Codable {
     var parent: io_object_t = 0
     
@@ -91,7 +158,7 @@ public struct drive: Codable {
 }
 
 public class Disks: Codable, RemoteType {
-    private var queue: DispatchQueue = DispatchQueue(label: "eu.exelban.Stats.Disk.SynchronizedArray")
+    private var queue: DispatchQueue = DispatchQueue(label: "zone.lyl.stats.Disk.SynchronizedArray")
     private var _array: [drive] = []
     public var array: [drive] {
         get { self.queue.sync { self._array } }
@@ -235,8 +302,26 @@ public class Disk: Module {
     private var capacityReader: CapacityReader?
     private var activityReader: ActivityReader?
     private var processReader: ProcessReader?
+    private var smartReader: SMARTReader?
+    
+    private let physicalQueue: DispatchQueue = DispatchQueue(label: "zone.lyl.stats.Disk.physical")
+    private var _physical: [physicalDrive] = []
+    private var physical: [physicalDrive] {
+        get { self.physicalQueue.sync { self._physical } }
+        set { self.physicalQueue.sync { self._physical = newValue } }
+    }
     
     private var selectedDisk: String = ""
+    
+    private var driveMiniTooltip: String = ""
+    private var stackTooltip: String = ""
+    
+    private var smartDrive: String {
+        Store.shared.string(key: "\(self.name)_smartDrive", defaultValue: "")
+    }
+    private var smartValue: String {
+        Store.shared.string(key: "\(self.name)_smartValue", defaultValue: "temperature")
+    }
     
     private var textValue: String {
         Store.shared.string(key: "\(self.name)_textWidgetValue", defaultValue: "$capacity.free/$capacity.total")
@@ -276,6 +361,11 @@ public class Disk: Module {
                 self?.popupView.processCallback(list)
             }
         }
+        self.smartReader = SMARTReader(.disk) { [weak self] value in
+            if let value {
+                self?.smartCallback(value)
+            }
+        }
         
         self.selectedDisk = Store.shared.string(key: "\(ModuleType.disk.stringValue)_disk", defaultValue: self.selectedDisk)
         
@@ -296,11 +386,83 @@ public class Disk: Module {
             }
         }
         
-        self.setReaders([self.capacityReader, self.activityReader, self.processReader])
+        self.setReaders([self.capacityReader, self.activityReader, self.processReader, self.smartReader])
+    }
+    
+    private func smartCallback(_ value: [physicalDrive]) {
+        self.physical = value
+        guard self.enabled else { return }
+        
+        DispatchQueue.main.async(execute: {
+            self.popupView.smartCallback(value)
+            self.previewView.smartCallback(value)
+        })
+        self.settingsView.setPhysicalList(value)
+        
+        // whichever drive the drive mini is pointed at, falling back to the built in one
+        let selected = value.first(where: { $0.id == self.smartDrive })
+            ?? value.first(where: { $0.isInternal })
+            ?? value.first
+        
+        self.menuBar.widgets.filter{ $0.isActive }.forEach { (w: SWidget) in
+            switch w.item {
+            case let widget as Mini where w.type == .driveMini:
+                guard let d = selected else { return }
+                self.setToolTip("\(d.name) - \(d.model)", of: widget, cache: &self.driveMiniTooltip)
+                guard let smart = d.smart else { return }
+                switch self.smartValue {
+                case "life":
+                    widget.setValue(Double(smart.life)/100)
+                    widget.setSuffix("%")
+                default:
+                    // Mini renders value*100, so hand it the localised reading scaled down
+                    let local = Double(temperature(Double(smart.temperature)).digits) ?? Double(smart.temperature)
+                    widget.setValue(local/100)
+                    widget.setSuffix("°")
+                }
+            case let widget as StackWidget:
+                var list: [Stack_t] = []
+                value.forEach { (d: physicalDrive) in
+                    guard let smart = d.smart else { return }
+                    if d.temperatureState {
+                        list.append(Stack_t(
+                            key: "\(d.id)_temperature",
+                            value: temperature(Double(smart.temperature)),
+                            label: "\(d.name) - \(localizedString("Temperature"))"
+                        ))
+                    }
+                    if d.lifeState {
+                        list.append(Stack_t(
+                            key: "\(d.id)_life",
+                            value: "\(smart.life)%",
+                            label: "\(d.name) - \(localizedString("Health"))"
+                        ))
+                    }
+                }
+                widget.setValues(list)
+                self.setToolTip(list.map({ "\($0.label ?? $0.key): \($0.value)" }).joined(separator: "\n"), of: widget, cache: &self.stackTooltip)
+            default: break
+            }
+        }
+    }
+    
+    private func setToolTip(_ value: String, of widget: NSView, cache: inout String) {
+        guard cache != value else { return }
+        cache = value
+        DispatchQueue.main.async {
+            widget.toolTip = value.isEmpty ? nil : value
+        }
     }
     
     private func capacityCallback(_ value: Disks) {
         guard self.enabled else { return }
+        
+        let drives = self.physical
+        if !drives.isEmpty {
+            value.array.enumerated().forEach { (i: Int, v: drive) in
+                value.updateSMARTData(i, smart: aggregateSMART(drives.filter({ $0.media.contains(v.BSDName) })))
+            }
+        }
         
         DispatchQueue.main.async(execute: {
             self.popupView.capacityCallback(value)
@@ -317,7 +479,7 @@ public class Disk: Module {
         
         self.menuBar.widgets.filter{ $0.isActive }.forEach { (w: SWidget) in
             switch w.item {
-            case let widget as Mini: widget.setValue(d.percentage)
+            case let widget as Mini where w.type == .mini: widget.setValue(d.percentage)
             case let widget as BarChart: widget.setValue([[ColorValue(d.percentage)]])
             case let widget as MemoryWidget:
                 widget.setValue((DiskSize(d.free).getReadableMemory(), DiskSize(d.size - d.free).getReadableMemory()), usedPercentage: d.percentage)
@@ -337,6 +499,13 @@ public class Disk: Module {
                         case "total": replacement = DiskSize(d.size).getReadableMemory()
                         case "used": replacement = DiskSize(d.size - d.free).getReadableMemory()
                         case "free": replacement = DiskSize(d.free).getReadableMemory()
+                        default: return
+                        }
+                    case "$smart":
+                        guard let smart = d.smart else { return }
+                        switch pair.value {
+                        case "temperature": replacement = temperature(Double(smart.temperature))
+                        case "life": replacement = "\(smart.life)%"
                         default: return
                         }
                     case "$percentage":

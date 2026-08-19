@@ -1,0 +1,107 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+
+    # the signing and notarisation secrets live in this environment, without it
+    # they resolve to empty strings and the certificate import fails silently
+    environment: APPLE_API_KEY_ID
+
+    env:
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      # there is no .env on the runner, the Makefile falls back to the environment
+      ENV_FILE: /nonexistent
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The updater compares the release tag against MARKETING_VERSION, so a
+      # mismatch would ship an update the app never offers, or offers forever.
+      - name: Check the tag matches MARKETING_VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          declared=$(/usr/libexec/PlistBuddy -c "print :objects:9A141107229E721200D29793:buildSettings:MARKETING_VERSION" Stats.xcodeproj/project.pbxproj)
+          tag="${GITHUB_REF_NAME#v}"
+          echo "tag=$tag declared=$declared"
+          if [ "$tag" != "$declared" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match MARKETING_VERSION $declared"
+            exit 1
+          fi
+
+      - name: Import the signing certificate
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/build.keychain-db"
+          password=$(uuidgen)
+          echo "KEYCHAIN_PATH=$keychain" >> "$GITHUB_ENV"
+
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+
+          printf '%s' "$CSC_LINK" | tr -d '\r' | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$CSC_KEY_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+          # without this codesign would need an interactive prompt it cannot get
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+
+          security find-identity -v -p codesigning "$keychain"
+
+      # Keeps the build number monotonic so PluginKit picks up the new widget.
+      - name: Stamp the build number
+        run: |
+          build=$(git rev-list --count HEAD)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "Stats/Supporting Files/Info.plist"
+          echo "build number: $build"
+
+      - name: Archive
+        run: make archive
+
+      - name: Notarize and staple
+        run: make notarize sign verify
+
+      - name: Build the disk image
+        run: make prepare-dmg sign-dmg
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" Stats.dmg \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Upload the artifact
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stats.dmg
+          path: Stats.dmg
+
+      - name: Remove the keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" || true

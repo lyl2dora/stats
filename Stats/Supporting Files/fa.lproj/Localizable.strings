@@ -202,6 +202,7 @@
 "One row" = "یک ردیف";
 "Two rows" = "دو ردیف";
 "Mini widget" = "کوچک";
+"Drive widget" = "Drive";
 "Line chart widget" = "نمودار خطی";
 "Bar chart widget" = "نمودار میله‌ای";
 "Pie chart widget" = "نمودار دایره‌ای";
@@ -346,6 +347,16 @@
 "Encrypted" = "رمزگذاری شده"; // gemma4:31b-it-qat
 "Writable" = "قابل نوشتن"; // gemma4:31b-it-qat
 "Drives" = "درایوها"; // translategemma:4b
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "داده‌های SMART"; // gemma4:31b
 "ATA SMART data" = "داده‌های ATA SMART"; // gemma4:31b
 "Power cycles" = "تعداد چرخه ها"; // gemma4:31b

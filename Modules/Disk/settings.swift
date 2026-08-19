@@ -28,8 +28,15 @@ You can use a combination of any of the variables.
 <li><b>$capacity.total</b>: <small>Total space of active drive.</small></li>
 <li><b>$percentage.free</b>: <small>Free space (percentage) of active drive.</small></li>
 <li><b>$percentage.used</b>: <small>Used space (percentage) of active drive.</small></li>
+<li><b>$smart.temperature</b>: <small>Temperature of active drive.</small></li>
+<li><b>$smart.life</b>: <small>Remaining life of active drive.</small></li>
 </ul>
 """
+
+let SmartValues: [KeyValue_t] = [
+    KeyValue_t(key: "temperature", value: "Temperature"),
+    KeyValue_t(key: "life", value: "Health")
+]
 
 internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     private let title: String
@@ -54,6 +61,10 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     private var list: [String] = []
     
     private let textWidgetHelpPanel: HelpHUD = HelpHUD(textWidgetHelp)
+    private let physicalSection = PreferencesSection(title: localizedString("Menu bar values"))
+    private var physicalList: [String] = []
+    private var physicalDrives: [physicalDrive] = []
+    private var driveWidgetSection: PreferencesSection?
     
     public init(_ module: ModuleType) {
         self.title = module.stringValue
@@ -123,6 +134,27 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
                     selected: self.speedUnitValue
                 ))
             ]))
+        }
+        
+        if widgets.contains(where: { $0 == .driveMini }) {
+            let section = PreferencesSection([
+                PreferencesRow(localizedString("Drive to show"), id: "smart_drive", component: self.selectView(
+                    action: #selector(self.handleSmartDrive),
+                    items: self.driveItems(),
+                    selected: self.smartDriveValue
+                )),
+                PreferencesRow(localizedString("Value to show"), component: self.selectView(
+                    action: #selector(self.handleSmartValue),
+                    items: SmartValues,
+                    selected: self.smartValueValue
+                ))
+            ])
+            self.driveWidgetSection = section
+            self.addArrangedSubview(section)
+        }
+        
+        if widgets.contains(where: { $0 == .stack }) {
+            self.addArrangedSubview(self.physicalSection)
         }
         
         self.addArrangedSubview(PreferencesSection([
@@ -217,6 +249,70 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
         self.speedUnitValue = networkSpeedUnit(from: key).key
         Store.shared.set(key: "\(self.title)_speedUnit", value: self.speedUnitValue)
     }
+    // One row per drive and per value, the stack widget shows whatever is switched on here.
+    public func setPhysicalList(_ list: [physicalDrive]) {
+        DispatchQueue.main.async {
+            if self.physicalDrives.map({ $0.id }) != list.map({ $0.id }) {
+                self.physicalDrives = list
+                if let row = self.driveWidgetSection?.findRow("smart_drive") {
+                    row.replaceComponent(with: self.selectView(
+                        action: #selector(Settings.handleSmartDrive),
+                        items: self.driveItems(),
+                        selected: self.smartDriveValue
+                    ))
+                }
+            }
+            self.physicalDrives = list
+            self.physicalList.filter({ id in !list.contains(where: { "\($0.id)_temperature" == id || "\($0.id)_life" == id }) }).forEach {
+                self.physicalSection.delete($0)
+            }
+            
+            list.forEach { (d: physicalDrive) in
+                let pairs: [(String, String, Bool)] = [
+                    ("\(d.id)_temperature", localizedString("Temperature"), d.temperatureState),
+                    ("\(d.id)_life", localizedString("Health"), d.lifeState)
+                ]
+                pairs.forEach { (id: String, title: String, state: Bool) in
+                    guard !self.physicalSection.contains(id) else { return }
+                    let btn = self.switchView(action: #selector(Settings.togglePhysicalValue), state: state)
+                    btn.identifier = NSUserInterfaceItemIdentifier(id)
+                    self.physicalSection.add(PreferencesRow("\(d.name) - \(title)", id: id, component: btn))
+                }
+            }
+            
+            self.physicalList = list.flatMap({ ["\($0.id)_temperature", "\($0.id)_life"] })
+        }
+    }
+    
+    private var smartDriveValue: String {
+        Store.shared.string(key: "\(self.title)_smartDrive", defaultValue: "")
+    }
+    private var smartValueValue: String {
+        Store.shared.string(key: "\(self.title)_smartValue", defaultValue: "temperature")
+    }
+    
+    private func driveItems() -> [KeyValue_t] {
+        self.physicalDrives.map { KeyValue_t(key: $0.id, value: "\($0.name) (\($0.model))") }
+    }
+    
+    @objc private func handleSmartDrive(_ sender: NSPopUpButton) {
+        guard let id = sender.selectedItem?.representedObject as? String else { return }
+        Store.shared.set(key: "\(self.title)_smartDrive", value: id)
+        self.callback()
+    }
+    
+    @objc private func handleSmartValue(_ sender: NSPopUpButton) {
+        guard let id = sender.selectedItem?.representedObject as? String else { return }
+        Store.shared.set(key: "\(self.title)_smartValue", value: id)
+        self.callback()
+    }
+    
+    @objc private func togglePhysicalValue(_ sender: NSControl) {
+        guard let id = sender.identifier else { return }
+        Store.shared.set(key: "\(self.title)_physical_\(id.rawValue)", value: controlState(sender))
+        self.callback()
+    }
+    
     @objc private func toggleSMART(_ sender: NSControl) {
         self.SMARTState = controlState(sender)
         Store.shared.set(key: "\(self.title)_SMART", value: self.SMARTState)

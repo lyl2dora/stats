@@ -202,6 +202,7 @@
 "One row" = "Jeden wiersz";
 "Two rows" = "Dwa wiersze";
 "Mini widget" = "Mini";
+"Drive widget" = "Drive";
 "Line chart widget" = "Wykres liniowy";
 "Bar chart widget" = "Wykres słupkowy";
 "Pie chart widget" = "Wykres kołowy";
@@ -346,6 +347,16 @@
 "Encrypted" = "Zaszyfrowany";
 "Writable" = "Zapisywalny";
 "Drives" = "Dyski";
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "Dane SMART";
 "ATA SMART data" = "Dane ATA SMART";
 "Power cycles" = "Liczba cykli";

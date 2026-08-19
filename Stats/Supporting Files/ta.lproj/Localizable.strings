@@ -202,6 +202,7 @@
 "One row" = "ஒரு வரிசை";
 "Two rows" = "இரண்டு வரிசைகள்";
 "Mini widget" = "Mini";
+"Drive widget" = "Drive";
 "Line chart widget" = "வரைபட வரிசை";
 "Bar chart widget" = "பட்டை வரைபடம்";
 "Pie chart widget" = "பை வரைபடம்";
@@ -346,6 +347,16 @@
 "Encrypted" = "மறைகுறியாக்கப்பட்ட";
 "Writable" = "எழுதக்கூடிய";
 "Drives" = "இயக்கிகள்";
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "SMART தரவு";
 "ATA SMART data" = "ATA SMART தரவு";
 "Power cycles" = "மின் சுழற்சிகள்";

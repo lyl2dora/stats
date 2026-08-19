@@ -18,4 +18,4 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - run: xcodebuild -scheme Stats -destination 'platform=macOS' -configuration Release archive CODE_SIGNING_ALLOWED=NO
+      - run: xcodebuild -scheme Stats -destination 'platform=macOS,arch=arm64' -configuration Release archive CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO

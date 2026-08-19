@@ -202,6 +202,7 @@
 "One row" = "Jeden riadok";
 "Two rows" = "Dva riadky";
 "Mini widget" = "Mini";
+"Drive widget" = "Drive";
 "Line chart widget" = "Čiarový graf";
 "Bar chart widget" = "Stĺpcový graf";
 "Pie chart widget" = "Koláčový graf";
@@ -346,6 +347,16 @@
 "Encrypted" = "Zašifrované"; // gemma4:31b-it-qat
 "Writable" = "Zapísateľný"; // gemma4:31b-it-qat
 "Drives" = "Disky"; // gemma4:31b
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "SMART údaje"; // gemma4:31b
 "ATA SMART data" = "Údaje ATA SMART"; // gemma4:31b
 "Power cycles" = "Počet cyklov"; // gemma4:31b

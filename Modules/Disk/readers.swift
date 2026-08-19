@@ -48,16 +48,7 @@ let kIOATASMARTInterfaceID = CFUUIDGetConstantUUIDWithBytes(nil,
 internal class CapacityReader: Reader<Disks> {
     internal var list: Disks = Disks()
     
-    private var SMART: Bool {
-        Store.shared.bool(key: "\(ModuleType.disk.stringValue)_SMART", defaultValue: true)
-    }
-    private var ATASMART: Bool {
-        Store.shared.bool(key: "\(ModuleType.disk.stringValue)_ATASMART", defaultValue: false)
-    }
-    
     private var purgableSpace: [URL: (Date, Int64)] = [:]
-    private var smartTotals: [String: (read: Int64, written: Int64)] = [:]
-    private var smartEnableAttempted: Set<String> = []
     
     public override func read() {
         let keys: [URLResourceKey] = [.volumeNameKey]
@@ -94,7 +85,6 @@ internal class CapacityReader: Reader<Disks> {
                             } else {
                                 if let path = d.path {
                                     self.list.updateFreeSize(idx, newValue: self.diskSpaceInBytes(path, fileSystem: d.fileSystem).free)
-                                    self.list.updateSMARTData(idx, smart: self.getSMARTDetails(for: BSDName))
                                 }
                                 continue
                             }
@@ -106,7 +96,6 @@ internal class CapacityReader: Reader<Disks> {
                                 d.free = space.free
                                 d.size = space.total
                             }
-                            d.smart = self.getSMARTDetails(for: BSDName)
                             guard d.size != 0 else {
                                 if d.parent != 0 { IOObjectRelease(d.parent) }
                                 continue
@@ -180,7 +169,29 @@ internal class CapacityReader: Reader<Disks> {
         return (total, free)
     }
     
-    private func getSMARTDetails(for BSDName: String) -> smart_t? {
+}
+
+// Reads the SMART payload of a block storage device. Shared by the volume and the physical drive readers.
+internal class SMARTProvider {
+    private var SMART: Bool {
+        Store.shared.bool(key: "\(ModuleType.disk.stringValue)_SMART", defaultValue: true)
+    }
+    private var ATASMART: Bool {
+        Store.shared.bool(key: "\(ModuleType.disk.stringValue)_ATASMART", defaultValue: false)
+    }
+    
+    private var smartTotals: [String: (read: Int64, written: Int64)] = [:]
+    private var smartEnableAttempted: Set<String> = []
+    
+    // Entry point for a device that has already been resolved in the IO registry.
+    public func details(for device: io_object_t, BSDName: String) -> smart_t? {
+        guard self.SMART, IOObjectConformsTo(device, kIOBlockStorageDeviceClass) > 0 else { return nil }
+        if let smart = self.getNVMeSMART(for: device) { return smart }
+        if self.ATASMART, let smart = self.getATASMART(for: device, BSDName: BSDName) { return smart }
+        return nil
+    }
+    
+    public func details(forBSD BSDName: String) -> smart_t? {
         guard self.SMART else { return nil }
         
         var disk = IOServiceGetMatchingService(kIOMainPortDefault, IOBSDNameMatching(kIOMainPortDefault, 0, BSDName.cString(using: .utf8)))
@@ -202,7 +213,7 @@ internal class CapacityReader: Reader<Disks> {
         return nil
     }
     
-    private func getNVMeSMART(for disk: io_object_t) -> smart_t? {
+    public func getNVMeSMART(for disk: io_object_t) -> smart_t? {
         guard let raw = IORegistryEntryCreateCFProperty(disk, "NVMe SMART Capable" as CFString, kCFAllocatorDefault, 0),
               let val = raw.takeRetainedValue() as? Bool, val else {
             return nil
@@ -266,7 +277,7 @@ internal class CapacityReader: Reader<Disks> {
         )
     }
     
-    private func getATASMART(for disk: io_object_t, BSDName: String) -> smart_t? {
+    public func getATASMART(for disk: io_object_t, BSDName: String) -> smart_t? {
         guard let raw = IORegistryEntryCreateCFProperty(disk, "SMART Capable" as CFString, kCFAllocatorDefault, 0),
               let val = raw.takeRetainedValue() as? Bool, val else {
             return nil
@@ -425,6 +436,212 @@ internal class CapacityReader: Reader<Disks> {
         
         return Int64(uint64Value)
     }
+}
+
+// Enumerates the physical block storage devices, internal and external alike, reads their SMART
+// payload and derives a bay number from the PCIe topology. Unlike the volume based readers this one
+// also sees drives that carry no mounted file system, which is what RAID members look like.
+internal class SMARTReader: Reader<[physicalDrive]> {
+    private let smart: SMARTProvider = SMARTProvider()
+    
+    private var cache: [String: smart_t] = [:]
+    private var totals: [String: (read: Int64, write: Int64)] = [:]
+    private var lastSMARTRead: Date? = nil
+    
+    private var enabled: Bool {
+        Store.shared.bool(key: "\(ModuleType.disk.stringValue)_SMART", defaultValue: true)
+    }
+    private var smartInterval: Double {
+        Double(Store.shared.int(key: "\(ModuleType.disk.stringValue)_smartInterval", defaultValue: 30))
+    }
+    
+    override func setup() {
+        self.setInterval(1)
+    }
+    
+    public override func read() {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(kIOBlockStorageDeviceClass), &iterator) == KERN_SUCCESS else {
+            error("cannot list the block storage devices", log: self.log)
+            return
+        }
+        defer { IOObjectRelease(iterator) }
+        
+        // only the SMART payload sits behind the setting, the drive list itself is always reported
+        if !self.enabled {
+            self.cache.removeAll()
+            self.lastSMARTRead = nil
+        }
+        
+        // the identity and the io counters are cheap, the SMART payload is not: refresh it on its own cadence
+        let refresh = self.enabled && (self.lastSMARTRead.map({ Date().timeIntervalSince($0) >= self.smartInterval }) ?? true)
+        var list: [physicalDrive] = []
+        
+        while case let device = IOIteratorNext(iterator), device != 0 {
+            defer { IOObjectRelease(device) }
+            guard var d = physicalDriveDetails(device) else { continue }
+            
+            if refresh, let value = self.smart.details(for: device, BSDName: d.BSDName) {
+                self.cache[d.id] = value
+            }
+            d.smart = self.cache[d.id]
+            
+            if let prev = self.totals[d.id] {
+                d.activity.read = max(0, d.activity.readBytes - prev.read)
+                d.activity.write = max(0, d.activity.writeBytes - prev.write)
+            }
+            self.totals[d.id] = (d.activity.readBytes, d.activity.writeBytes)
+            
+            list.append(d)
+        }
+        
+        if refresh {
+            self.lastSMARTRead = Date()
+        }
+        
+        self.assignSlots(&list)
+        list.sort { lhs, rhs in
+            if lhs.isInternal != rhs.isInternal { return lhs.isInternal }
+            return lhs.slot < rhs.slot
+        }
+        
+        let present = Set(list.map({ $0.id }))
+        self.cache = self.cache.filter({ present.contains($0.key) })
+        self.totals = self.totals.filter({ present.contains($0.key) })
+        
+        self.callback(list)
+    }
+    
+    // Bay numbers follow the topology, but they are remembered per drive so that replugging the
+    // enclosure into another port does not renumber the drives underneath the user.
+    private func assignSlots(_ list: inout [physicalDrive]) {
+        let order = list.enumerated().filter({ !$0.element.isInternal }).sorted { lhs, rhs in
+            if lhs.element.enclosure != rhs.element.enclosure {
+                return lhs.element.enclosure < rhs.element.enclosure
+            }
+            return lhs.element.slotPath.lexicographicallyPrecedes(rhs.element.slotPath)
+        }
+        
+        var used: Set<Int> = []
+        var pending: [Int] = []
+        
+        order.forEach { (idx: Int, d: physicalDrive) in
+            let stored = Store.shared.int(key: "\(ModuleType.disk.stringValue)_slot_\(d.id)", defaultValue: 0)
+            if stored > 0 && !used.contains(stored) {
+                list[idx].slot = stored
+                used.insert(stored)
+            } else {
+                pending.append(idx)
+            }
+        }
+        
+        var next: Int = 1
+        pending.forEach { idx in
+            while used.contains(next) { next += 1 }
+            list[idx].slot = next
+            used.insert(next)
+            Store.shared.set(key: "\(ModuleType.disk.stringValue)_slot_\(list[idx].id)", value: next)
+        }
+    }
+}
+
+private func physicalDriveDetails(_ device: io_object_t) -> physicalDrive? {
+    var d = physicalDrive()
+    
+    if let props = getIOProperties(device) {
+        if let characteristics = props.object(forKey: "Device Characteristics") as? [String: Any] {
+            d.serial = (characteristics["Serial Number"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            d.model = (characteristics["Product Name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let characteristics = props.object(forKey: "Protocol Characteristics") as? [String: Any] {
+            d.connectionType = (characteristics["Physical Interconnect"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            d.isInternal = (characteristics["Physical Interconnect Location"] as? String) != "External"
+            // mounted disk images register as block storage devices too, they have no hardware behind them
+            guard d.connectionType != "Disk Image" && d.connectionType != "Virtual Interface" else { return nil }
+        }
+        if let removable = props.object(forKey: "Removable") as? Bool {
+            d.removable = removable
+        }
+    }
+    
+    // the whole disk media and the io counters both live one level below the device
+    var driver: io_registry_entry_t = 0
+    guard IORegistryEntryGetChildEntry(device, kIOServicePlane, &driver) == KERN_SUCCESS, driver != 0 else { return nil }
+    defer { IOObjectRelease(driver) }
+    
+    if let props = getIOProperties(driver), let statistics = props.object(forKey: "Statistics") as? NSDictionary {
+        d.activity.readBytes = statistics.object(forKey: "Bytes (Read)") as? Int64 ?? 0
+        d.activity.writeBytes = statistics.object(forKey: "Bytes (Write)") as? Int64 ?? 0
+    }
+    
+    var whole: io_registry_entry_t = 0
+    guard IORegistryEntryGetChildEntry(driver, kIOServicePlane, &whole) == KERN_SUCCESS, whole != 0 else { return nil }
+    defer { IOObjectRelease(whole) }
+    
+    if let props = getIOProperties(whole) {
+        d.BSDName = props.object(forKey: "BSD Name") as? String ?? ""
+        d.size = props.object(forKey: "Size") as? Int64 ?? 0
+    }
+    guard !d.BSDName.isEmpty else { return nil }
+    
+    // every partition, RAID set and container built on top of this drive shows up in its subtree,
+    // which is how a volume gets mapped back to the drives it actually lives on
+    var iterator: io_iterator_t = 0
+    if IORegistryEntryCreateIterator(whole, kIOServicePlane, IOOptionBits(kIORegistryIterateRecursively), &iterator) == KERN_SUCCESS {
+        defer { IOObjectRelease(iterator) }
+        while case let child = IOIteratorNext(iterator), child != 0 {
+            defer { IOObjectRelease(child) }
+            guard IOObjectConformsTo(child, "IOMedia") > 0, let props = getIOProperties(child),
+                  let name = props.object(forKey: "BSD Name") as? String else { continue }
+            d.media.append(name)
+        }
+    }
+    
+    let topology = driveTopology(device)
+    d.enclosure = topology.enclosure
+    d.slotPath = topology.path
+    
+    return d
+}
+
+// Walks up to the PCI hierarchy and collects the unit address of every bridge on the way out of it.
+// Those addresses are wired in hardware, so together they identify the bay a drive sits in. The first
+// parent above the hierarchy is the host controller and is what tells two enclosures apart.
+private func driveTopology(_ device: io_object_t) -> (enclosure: String, path: [Int]) {
+    var entry: io_registry_entry_t = device
+    IOObjectRetain(entry)
+    defer { IOObjectRelease(entry) }
+    
+    var path: [Int] = []
+    var enclosure: String = ""
+    var insidePCI: Bool = false
+    
+    for _ in 0..<32 {
+        var parent: io_registry_entry_t = 0
+        guard IORegistryEntryGetParentEntry(entry, kIOServicePlane, &parent) == KERN_SUCCESS, parent != 0 else { break }
+        IOObjectRelease(entry)
+        entry = parent
+        
+        guard IOObjectConformsTo(entry, "IOPCIDevice") > 0 || IOObjectConformsTo(entry, "IOPCIBridge") > 0 else {
+            guard insidePCI else { continue }
+            var path = [CChar](repeating: 0, count: 1024)
+            if IORegistryEntryGetPath(entry, kIOServicePlane, &path) == KERN_SUCCESS {
+                enclosure = String(cString: path)
+            }
+            break
+        }
+        insidePCI = true
+        
+        // bridge drivers sit between the devices and carry no unit address of their own
+        var location = [CChar](repeating: 0, count: 128)
+        guard IORegistryEntryGetLocationInPlane(entry, kIOServicePlane, &location) == KERN_SUCCESS else { continue }
+        let raw = String(cString: location).split(separator: ",").first.map(String.init) ?? ""
+        if let value = Int(raw, radix: 16) {
+            path.append(value)
+        }
+    }
+    
+    return (enclosure, path.reversed())
 }
 
 internal class ActivityReader: Reader<Disks> {
@@ -641,7 +858,7 @@ struct io {
 }
 
 public class ProcessReader: Reader<[Disk_process]> {
-    private let queue = DispatchQueue(label: "eu.exelban.Disk.processReader")
+    private let queue = DispatchQueue(label: "zone.lyl.Disk.processReader")
     
     private var _list: [Int32: io] = [:]
     private var list: [Int32: io] {

@@ -202,6 +202,7 @@
 "One row" = "Ena vrstica";
 "Two rows" = "Dve vrstici";
 "Mini widget" = "Mini";
+"Drive widget" = "Drive";
 "Line chart widget" = "Črtni diagram";
 "Bar chart widget" = "Stolpčni diagram";
 "Pie chart widget" = "Tortni diagram";
@@ -346,6 +347,16 @@
 "Encrypted" = "Šifrirano"; // gemma4:31b-it-qat
 "Writable" = "Zapisljiv"; // gemma4:31b-it-qat
 "Drives" = "Pogoni";
+"Physical drives" = "Physical drives";
+"Disk details" = "Disk details";
+"Menu bar values" = "Menu bar values";
+"Drive to show" = "Drive to show";
+"Value to show" = "Value to show";
+"Internal" = "Internal";
+"Drive" = "Drive";
+"Capacity" = "Capacity";
+"drives" = "drives";
+"external" = "external";
 "SMART data" = "SMART podatki"; // gemma4:31b
 "ATA SMART data" = "Podatki ATA SMART"; // gemma4:31b
 "Power cycles" = "Število ciklov"; // gemma4:31b

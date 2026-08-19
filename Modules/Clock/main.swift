@@ -62,7 +62,7 @@ public struct Clock_t: Codable {
         Clock_t.formatter(format: self.format, tz: self.tz, calendarKey: self.calendar).string(from: self.value ?? Date())
     }
     
-    private static let formattersQueue = DispatchQueue(label: "eu.exelban.Stats.Clock.formatters")
+    private static let formattersQueue = DispatchQueue(label: "zone.lyl.stats.Clock.formatters")
     private static var formatters: [String: DateFormatter] = [:]
     
     private static func formatter(format: String, tz: String, calendarKey: String) -> DateFormatter {
@@ -111,7 +111,7 @@ public class Clock: Module {
             return objectsDecoded
         }
     }
-    private static let listQueue = DispatchQueue(label: "eu.exelban.Stats.Clock.list")
+    private static let listQueue = DispatchQueue(label: "zone.lyl.stats.Clock.list")
     private static var cachedList: (raw: Data, list: [Clock_t])? = nil
     
     public init() {
