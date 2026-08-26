@@ -29,17 +29,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The updater compares the release tag against MARKETING_VERSION, so a
-      # mismatch would ship an update the app never offers, or offers forever.
-      - name: Check the tag matches MARKETING_VERSION
-        if: startsWith(github.ref, 'refs/tags/')
+      # MARKETING_VERSION is the single source of truth: the updater compares the release tag
+      # against it, so a mismatch would ship an update the app never offers, or offers forever.
+      # On a tag the two have to agree, on a manual run the tag is derived from it.
+      - name: Resolve the release tag
         run: |
           declared=$(/usr/libexec/PlistBuddy -c "print :objects:9A141107229E721200D29793:buildSettings:MARKETING_VERSION" Stats.xcodeproj/project.pbxproj)
-          tag="${GITHUB_REF_NAME#v}"
-          echo "tag=$tag declared=$declared"
-          if [ "$tag" != "$declared" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match MARKETING_VERSION $declared"
-            exit 1
+          echo "declared=$declared"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            echo "tag=$tag"
+            if [ "$tag" != "$declared" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match MARKETING_VERSION $declared"
+              exit 1
+            fi
+            echo "RELEASE_TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=v$declared" >> "$GITHUB_ENV"
           fi
 
       - name: Import the signing certificate
@@ -82,21 +88,16 @@ jobs:
       - name: Build the disk image
         run: make prepare-dmg sign-dmg
 
+      # A manual run releases too. The tag does not exist yet in that case, so it is cut at the
+      # commit that was built. An already released version fails here instead of shipping twice.
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" Stats.dmg \
-            --title "$GITHUB_REF_NAME" \
+          gh release create "$RELEASE_TAG" Stats.dmg \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" \
             --generate-notes
-
-      - name: Upload the artifact
-        if: "!startsWith(github.ref, 'refs/tags/')"
-        uses: actions/upload-artifact@v7
-        with:
-          name: Stats.dmg
-          path: Stats.dmg
 
       - name: Remove the keychain
         if: always()
