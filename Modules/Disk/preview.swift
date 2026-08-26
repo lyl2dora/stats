@@ -13,7 +13,12 @@ import Cocoa
 import Kit
 
 internal class Preview: PreviewWrapper {
-    private var main: disk_s? = nil
+    private var volumes: Disks = Disks()
+    private var volumeList: [String] = []
+    private var selectedVolume: String = ""
+    private var volumeButton: NSPopUpButton? = nil
+    private var fileSystemField: NSTextField? = nil
+    private var sizeField: NSTextField? = nil
     
     private var circle: PieChartView? = nil
     private var bar: BarChartView? = nil
@@ -83,15 +88,17 @@ internal class Preview: PreviewWrapper {
         
         self.loadColors()
         self.selectedDrive = Store.shared.string(key: "\(module.stringValue)_preview_selected", defaultValue: "")
+        self.selectedVolume = Store.shared.string(key: "\(module.stringValue)_preview_volume", defaultValue: "")
         
+        // Two subjects, two blocks: the usage summary and the history chart are volume level and follow
+        // the volume picker, everything from the drive list down is drive level and follows the row selection.
         self.addArrangedSubview(PreferencesSection([self.usageView()]))
+        self.addArrangedSubview(PreferencesSection(title: localizedString("Read / Write history"), [self.historyView()]))
         
         let allDisks = PreferencesSection(title: localizedString("All disks"), subtitle: "", [self.disks])
         allDisks.isHidden = true
         self.addArrangedSubview(allDisks)
         self.allDisks = allDisks
-        
-        self.addArrangedSubview(PreferencesSection(title: localizedString("Read / Write history"), [self.historyView()]))
         
         let splitView = NSStackView()
         splitView.orientation = .horizontal
@@ -138,39 +145,36 @@ internal class Preview: PreviewWrapper {
             view.distribution = .fillEqually
             view.spacing = 2
             
-            var nameValue = localizedString("Unknown")
-            var fileSystemValue = localizedString("Unknown")
-            var sizeValue = localizedString("Unknown")
-            if let disk = SystemKit.shared.device.info.disk?.first {
-                if let name = disk.name {
-                    nameValue = name
-                }
-                if let fileSystem = disk.fileSystem {
-                    fileSystemValue = fileSystem.uppercased()
-                }
-                if let size = disk.size {
-                    sizeValue = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-                }
-                self.main = disk
-            }
+            // the volume list is not known before the first capacity read
+            let nameValue = localizedString("Unknown")
+            let fileSystemValue = localizedString("Unknown")
+            let sizeValue = localizedString("Unknown")
             
             let title: NSView = {
                 let view = NSStackView()
                 view.orientation = .horizontal
                 view.spacing = 2
                 
-                let nameField = NSButton()
-                nameField.bezelStyle = .inline
-                nameField.isBordered = false
-                nameField.contentTintColor = .labelColor
-                nameField.action = #selector(self.openDisk)
-                nameField.target = self
-                nameField.toolTip = nameValue
-                nameField.title = nameValue
-                nameField.cell?.truncatesLastVisibleLine = true
+                let volumeButton = NSPopUpButton()
+                volumeButton.isBordered = false
+                volumeButton.target = self
+                volumeButton.action = #selector(self.selectVolume)
+                volumeButton.contentTintColor = .labelColor
+                volumeButton.addItem(withTitle: nameValue)
+                volumeButton.toolTip = nameValue
+                volumeButton.cell?.truncatesLastVisibleLine = true
+                self.volumeButton = volumeButton
+                
+                let openButton = self.buttonIconView(
+                    #selector(self.openDisk),
+                    icon: iconFromSymbol(name: "arrow.up.forward.app", scale: .small),
+                    height: 16
+                )
+                openButton.toolTip = localizedString("Open disk")
                 
                 let fileSystemField = LabelField(fileSystemValue)
                 fileSystemField.textColor = .tertiaryLabelColor
+                self.fileSystemField = fileSystemField
                 
                 let activity: NSStackView = NSStackView()
                 activity.distribution = .fill
@@ -196,8 +200,9 @@ internal class Preview: PreviewWrapper {
                 activity.addArrangedSubview(readState)
                 activity.addArrangedSubview(writeState)
                 
-                view.addArrangedSubview(nameField)
+                view.addArrangedSubview(volumeButton)
                 view.addArrangedSubview(activity)
+                view.addArrangedSubview(openButton)
                 view.addArrangedSubview(NSView())
                 view.addArrangedSubview(fileSystemField)
                 
@@ -214,11 +219,12 @@ internal class Preview: PreviewWrapper {
             self.usedField = previewRow(levels, space: false, color: NSColor.systemBlue, title: "\(localizedString("Used")):", value: "")
             self.freeField = previewRow(levels, space: false, color: NSColor.lightGray, title: "\(localizedString("Free")):", value: "")
             
-            let fileSystemField = LabelField(sizeValue)
-            fileSystemField.textColor = .tertiaryLabelColor
+            let sizeField = LabelField(sizeValue)
+            sizeField.textColor = .tertiaryLabelColor
+            self.sizeField = sizeField
             
             levels.addArrangedSubview(NSView())
-            levels.addArrangedSubview(fileSystemField)
+            levels.addArrangedSubview(sizeField)
             
             view.addArrangedSubview(title)
             view.addArrangedSubview(bar)
@@ -291,25 +297,74 @@ internal class Preview: PreviewWrapper {
     
     internal func capacityCallback(_ value: Disks) {
         DispatchQueue.main.async(execute: {
+            self.volumes = value
+            
             guard (self.window?.isVisible ?? false) || !self.initialized else { return }
-            guard let main = self.main, let update = value.first(where: { $0.uuid == main.id }) else { return }
             
-            let free = update.free
-            let used = update.size - free
-            self.usedField?.stringValue = DiskSize(used).getReadableMemory()
-            self.freeField?.stringValue = DiskSize(free).getReadableMemory()
-            
-            self.circle?.setValue(update.percentage)
-            self.bar?.setValue(ColorValue(update.percentage, color: update.percentage.usageColor()))
-            
-            self.uri = update.path
+            self.syncVolumes(value)
+            self.renderVolume()
             
             self.initialized = true
         })
     }
     
-    // The drive list and everything below it follows the selection, the usage summary and the history
-    // chart at the top stay on the boot volume.
+    // Mounting or ejecting something is the only thing that changes the list, so the menu is rebuilt
+    // only then. Rebuilding it on every read would close the popup under the cursor.
+    private func syncVolumes(_ value: Disks) {
+        let list = value.array
+        let signature = list.map({ "\($0.uuid)\u{1}\($0.mediaName)" })
+        guard signature != self.volumeList, let button = self.volumeButton else { return }
+        self.volumeList = signature
+        
+        let menu = NSMenu()
+        list.forEach { d in
+            let item = NSMenuItem(title: d.mediaName.isEmpty ? d.BSDName : d.mediaName, action: nil, keyEquivalent: "")
+            item.representedObject = d.uuid
+            menu.addItem(item)
+        }
+        button.menu = menu
+        button.isEnabled = list.count > 1
+    }
+    
+    private func renderVolume() {
+        // a volume can be ejected while it is selected, fall back to the boot one
+        var selected = self.volumes.first(where: { $0.uuid == self.selectedVolume })
+        if selected == nil {
+            selected = self.volumes.first(where: { $0.root }) ?? self.volumes.array.first
+            self.selectedVolume = selected?.uuid ?? ""
+        }
+        guard let d = selected else { return }
+        
+        if let button = self.volumeButton,
+           let idx = button.menu?.items.firstIndex(where: { $0.representedObject as? String == d.uuid }) {
+            button.selectItem(at: idx)
+            button.toolTip = button.itemTitle(at: idx)
+        }
+        
+        self.fileSystemField?.stringValue = d.fileSystem.isEmpty ? localizedString("Unknown") : d.fileSystem.uppercased()
+        self.sizeField?.stringValue = DiskSize(d.size).getReadableMemory()
+        
+        let free = d.free
+        let used = d.size - free
+        self.usedField?.stringValue = DiskSize(used).getReadableMemory()
+        self.freeField?.stringValue = DiskSize(free).getReadableMemory()
+        
+        self.circle?.setValue(d.percentage)
+        self.bar?.setValue(ColorValue(d.percentage, color: d.percentage.usageColor()))
+        
+        self.uri = d.path
+    }
+    
+    @objc private func selectVolume(_ sender: NSPopUpButton) {
+        guard let id = sender.selectedItem?.representedObject as? String, self.selectedVolume != id else { return }
+        self.selectedVolume = id
+        Store.shared.set(key: "\(self.module.stringValue)_preview_volume", value: id)
+        // what is on the chart belongs to the volume that was selected before, keeping it would read
+        // as one continuous series
+        self.chart?.reinit(600)
+        self.renderVolume()
+    }
+    
     internal func smartCallback(_ value: [physicalDrive]) {
         DispatchQueue.main.async(execute: {
             self.drives = value
@@ -450,7 +505,7 @@ internal class Preview: PreviewWrapper {
     }
     
     internal func activityCallback(_ value: Disks) {
-        guard let main = self.main, let update = value.first(where: { $0.uuid == main.id }) else {
+        guard let update = value.first(where: { $0.uuid == self.selectedVolume }) else {
             return
         }
         let read = update.activity.read
