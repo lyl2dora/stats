@@ -819,10 +819,9 @@ private func driveDetails(_ disk: DADisk, removableState: Bool) -> drive? {
         d.uuid = d.BSDName
     }
     
-    let partitionLevel = d.BSDName.filter { "0"..."9" ~= $0 }.count
     let media = DADiskCopyIOMedia(disk)
     if media != 0 {
-        if let parent = getDeviceIOParent(media, level: Int(partitionLevel)) {
+        if let parent = getDeviceIOParent(media) {
             d.parent = parent
         }
         IOObjectRelease(media)
@@ -832,24 +831,30 @@ private func driveDetails(_ disk: DADisk, removableState: Bool) -> drive? {
 }
 
 // https://opensource.apple.com/source/bless/bless-152/libbless/APFS/BLAPFSUtilities.c.auto.html
-public func getDeviceIOParent(_ obj: io_registry_entry_t, level: Int) -> io_registry_entry_t? {
-    var parent: io_registry_entry_t = 0
+// the io counters sit on the partition scheme or the block storage driver somewhere above the volume, and how
+// far up that is depends on the storage stack (apfs container, partition map, raid set), not on the BSD name.
+// walk up until the counters show up instead of guessing a fixed number of levels
+public func getDeviceIOParent(_ obj: io_registry_entry_t) -> io_registry_entry_t? {
+    var entry: io_registry_entry_t = obj
+    IOObjectRetain(entry)
     
-    if IORegistryEntryGetParentEntry(obj, kIOServicePlane, &parent) != KERN_SUCCESS {
-        return nil
-    }
-    
-    for _ in 1...level {
-        var next: io_registry_entry_t = 0
-        let result = IORegistryEntryGetParentEntry(parent, kIOServicePlane, &next)
-        IOObjectRelease(parent)
-        if result != KERN_SUCCESS {
-            return nil
+    // deep enough for a volume on an apfs container on a raid set, shallow enough to stop before the root
+    for _ in 0..<8 {
+        var parent: io_registry_entry_t = 0
+        let result = IORegistryEntryGetParentEntry(entry, kIOServicePlane, &parent)
+        IOObjectRelease(entry)
+        guard result == KERN_SUCCESS, parent != 0 else { return nil }
+        entry = parent
+        
+        // apfs volumes carry a Statistics dictionary of their own, so match on the block level counters
+        if let props = getIOProperties(entry), let statistics = props.object(forKey: "Statistics") as? NSDictionary,
+           statistics.object(forKey: "Bytes (Read)") != nil {
+            return entry
         }
-        parent = next
     }
     
-    return parent
+    IOObjectRelease(entry)
+    return nil
 }
 
 struct io {
