@@ -54,6 +54,7 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     public var callback: (() -> Void) = {}
     public var setInterval: ((_ value: Int) -> Void) = {_ in }
     public var callbackWhenUpdateNumberOfProcesses: (() -> Void) = {}
+    public var smartValueHandler: (() -> Void) = {}
     
     private var selectedDisk: String
     private var button: NSPopUpButton?
@@ -304,7 +305,7 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     @objc private func handleSmartValue(_ sender: NSPopUpButton) {
         guard let id = sender.selectedItem?.representedObject as? String else { return }
         Store.shared.set(key: "\(self.title)_smartValue", value: id)
-        self.callback()
+        self.smartValueHandler()
     }
     
     @objc private func togglePhysicalValue(_ sender: NSControl) {

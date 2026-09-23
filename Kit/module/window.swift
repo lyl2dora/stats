@@ -292,7 +292,7 @@ open class Window: NSStackView {
         for i in 0...list.count - 1 {
             self.widgetSettingsContainer?.addArrangedSubview(WidgetSettings(
                 title: list[i].type.name(),
-                image: list[i].image,
+                widget: list[i],
                 settingsView: list[i].item.settings()
             ))
         }
@@ -396,8 +396,7 @@ private class WidgetSelectorView: NSStackView {
                 let widget = widgets[i]
                 let preview = WidgetPreview(
                     id: "\(widget.module)_\(widget.type)",
-                    type: widget.type,
-                    image: widget.image,
+                    widget: widget,
                     isActive: widget.isActive, { [weak self] state in
                         widget.toggle(state)
                         self?.stateCallback()
@@ -558,8 +557,8 @@ private class WidgetSelectorView: NSStackView {
 private class WidgetPreview: NSStackView {
     private var stateCallback: (_ status: Bool) -> Void = {_ in }
     
-    private let rgbImage: NSImage
-    private let grayImage: NSImage
+    private var rgbImage: NSImage
+    private var grayImage: NSImage
     private let imageView: NSImageView
     
     private var state: Bool
@@ -570,7 +569,9 @@ private class WidgetPreview: NSStackView {
         set { Store.shared.set(key: "\(self.id)_position", value: newValue) }
     }
     
-    fileprivate init(id: String, type: widget_t, image: NSImage, isActive: Bool, _ callback: @escaping (_ status: Bool) -> Void) {
+    fileprivate init(id: String, widget: SWidget, isActive: Bool, _ callback: @escaping (_ status: Bool) -> Void) {
+        let type = widget.type
+        let image = widget.image
         self.id = id
         self.stateCallback = callback
         self.rgbImage = image
@@ -616,10 +617,23 @@ private class WidgetPreview: NSStackView {
             self.widthAnchor.constraint(equalToConstant: self.imageView.frame.width + Constants.Widget.spacing*2),
             self.heightAnchor.constraint(equalToConstant: self.frame.height)
         ])
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(self.listenForImage), name: .widgetImageUpdated, object: widget)
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: .widgetImageUpdated, object: nil)
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    @objc private func listenForImage(_ notification: Notification) {
+        guard let widget = notification.object as? SWidget else { return }
+        self.rgbImage = widget.image
+        self.grayImage = grayscaleImage(widget.image) ?? widget.image
+        self.imageView.image = self.state ? self.rgbImage : self.grayImage
     }
     
     fileprivate func status(_ newState: Bool) {
@@ -647,19 +661,32 @@ private class WidgetPreview: NSStackView {
 }
 
 private class WidgetSettings: NSStackView {
-    fileprivate init(title: String, image: NSImage, settingsView: NSView) {
+    private var imageView: NSImageView?
+    
+    fileprivate init(title: String, widget: SWidget, settingsView: NSView) {
         super.init(frame: NSRect.zero)
         
         self.translatesAutoresizingMaskIntoConstraints = false
         self.orientation = .vertical
         self.spacing = 0
         
-        self.addArrangedSubview(self.header(title, image))
+        self.addArrangedSubview(self.header(title, widget.image))
         self.addArrangedSubview(settingsView)
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(self.listenForImage), name: .widgetImageUpdated, object: widget)
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: .widgetImageUpdated, object: nil)
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    @objc private func listenForImage(_ notification: Notification) {
+        guard let widget = notification.object as? SWidget else { return }
+        self.imageView?.image = widget.image
     }
     
     private func header(_ title: String, _ image: NSImage) -> NSView {
@@ -700,6 +727,7 @@ private class WidgetSettings: NSStackView {
         
         let imageView = NSImageView(frame: NSRect(origin: .zero, size: image.size))
         imageView.image = image
+        self.imageView = imageView
         
         imageContainer.addArrangedSubview(imageView)
         

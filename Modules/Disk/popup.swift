@@ -747,7 +747,7 @@ private class LegendView: NSView {
         if self.showUsedSpace {
             percentage = Int((Double(self.size - free) / Double(self.size)) * 100)
         } else {
-            percentage = Int((Double(free) / Double(self.size)).rounded(toPlaces: 2) * 100)
+            percentage = (Double(free) / Double(self.size)).roundedPercentage
         }
         
         return "\(percentage < 0 ? 0 : percentage)%"
@@ -793,7 +793,7 @@ internal class DetailsView: NSStackView {
     private var availableSpareValueField: ValueField?
     
     private let statsCache = PopupCache<stats>()
-    private let smartCache = PopupCache<smart_t>()
+    private let smartCache = PopupCache<smart_t?>()
     
     public init(width: CGFloat, details: drive? = nil) {
         super.init(frame: CGRect(x: 0, y: 0, width: width, height: 0))
@@ -905,11 +905,23 @@ internal class DetailsView: NSStackView {
     }
     
     public func update(smart: smart_t?) {
-        guard let smart else { return }
         self.smartCache.apply(smart, visible: self.window?.isVisible ?? false, render: self.renderSmart)
     }
     
-    private func renderSmart(_ smart: smart_t) {
+    private func renderSmart(_ smart: smart_t?) {
+        // no SMART behind this volume, or it was switched off: say so like the drive rows do, rather than
+        // keep the last reading or the placeholders
+        guard let smart else {
+            [self.smartTotalReadValueField, self.smartTotalWrittenValueField, self.temperatureValueField,
+             self.healthValueField, self.powerCyclesValueField, self.powerOnHoursValueField,
+             self.criticalWarningValueField, self.availableSpareValueField].forEach {
+                $0?.stringValue = localizedString("Unavailable")
+                $0?.textColor = .textColor
+                $0?.toolTip = nil
+            }
+            return
+        }
+        
         self.smartTotalReadValueField?.toolTip = "\(smart.totalRead / (512 * 1000))"
         self.smartTotalWrittenValueField?.toolTip = "\(smart.totalWritten / (512 * 1000))"
         self.smartTotalReadValueField?.stringValue = Units(bytes: smart.totalRead).getReadableMemory()

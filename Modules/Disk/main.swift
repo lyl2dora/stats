@@ -112,6 +112,11 @@ internal func aggregateSMART(_ list: [physicalDrive]) -> smart_t? {
     )
 }
 
+// A Celsius threshold for the drive widget's colour, in the unit the widget draws and scaled the way Mini expects.
+private func driveTemperatureZone(_ celsius: Double) -> Double {
+    Measurement(value: celsius, unit: UnitTemperature.celsius).converted(to: UnitTemperature.current).value / 100
+}
+
 public struct drive: Codable {
     var parent: io_object_t = 0
     
@@ -346,6 +351,10 @@ public class Disk: Module {
         )
         guard self.available else { return }
         
+        // Mini's default reads as 0%, start the drive widget on a dash instead; it has to happen before the
+        // SMART reader is created, that replays the last stored reading straight away
+        (self.menuBar.widgets.first(where: { $0.type == .driveMini })?.item as? Mini)?.setValue(nil)
+        
         self.capacityReader = CapacityReader(.disk) { [weak self] value in
             if let value {
                 self?.capacityCallback(value)
@@ -385,6 +394,11 @@ public class Disk: Module {
                 self?.processReader?.read()
             }
         }
+        self.settingsView.smartValueHandler = { [weak self] in
+            self?.updateDriveWidgetImage()
+        }
+        
+        self.updateDriveWidgetImage()
         
         self.setReaders([self.capacityReader, self.activityReader, self.processReader, self.smartReader])
     }
@@ -407,19 +421,18 @@ public class Disk: Module {
         self.menuBar.widgets.filter{ $0.isActive }.forEach { (w: SWidget) in
             switch w.item {
             case let widget as Mini where w.type == .driveMini:
-                guard let d = selected else { return }
-                self.setToolTip("\(d.name) - \(d.model)", of: widget, cache: &self.driveMiniTooltip)
-                guard let smart = d.smart else { return }
-                switch self.smartValue {
-                case "life":
-                    widget.setValue(Double(smart.life)/100)
-                    widget.setSuffix("%")
-                default:
-                    // Mini renders value*100, so hand it the localised reading scaled down
-                    let local = Double(temperature(Double(smart.temperature)).digits) ?? Double(smart.temperature)
-                    widget.setValue(local/100)
-                    widget.setSuffix("°")
+                // no drive, SMART switched off, or a drive that does not report it: show a dash rather
+                // than keep whatever the previous drive last read
+                guard let d = selected else {
+                    widget.setValue(nil)
+                    return
                 }
+                self.setToolTip("\(d.name) - \(d.model)", of: widget, cache: &self.driveMiniTooltip)
+                guard let smart = d.smart else {
+                    widget.setValue(nil)
+                    return
+                }
+                self.setDriveValue(smart, of: widget)
             case let widget as StackWidget:
                 var list: [Stack_t] = []
                 value.forEach { (d: physicalDrive) in
@@ -443,6 +456,35 @@ public class Disk: Module {
                 self.setToolTip(list.map({ "\($0.label ?? $0.key): \($0.value)" }).joined(separator: "\n"), of: widget, cache: &self.stackTooltip)
             default: break
             }
+        }
+    }
+    
+    private func setDriveValue(_ smart: smart_t, of widget: Mini) {
+        switch self.smartValue {
+        case "life":
+            widget.setValue(Double(smart.life)/100)
+            widget.setSuffix("%")
+            // the same bands as the health bar in the preview: red under 20%, orange under 40%
+            widget.setColorZones((0.195, 0.395), reversed: true)
+        default:
+            // Mini renders value*100, so hand it the localised reading scaled down
+            let local = Double(temperature(Double(smart.temperature)).digits) ?? Double(smart.temperature)
+            widget.setValue(local/100)
+            widget.setSuffix("°")
+            // orange from 60°C and red from 70°C like the popup, the half degree keeps a whole degree
+            // reading on the right side of each line, and the zones follow the unit the reading is drawn in
+            widget.setColorZones((driveTemperatureZone(59.5), driveTemperatureZone(69.5)))
+        }
+    }
+    
+    // The drive widget thumbnail is drawn from the config as a plain percentage, redraw it with
+    // whichever value the widget is set to show so the settings do not advertise capacity.
+    private func updateDriveWidgetImage() {
+        let life = self.smartValue == "life"
+        self.menuBar.widgets.first(where: { $0.type == .driveMini })?.updateImage { view in
+            guard let widget = view as? Mini else { return }
+            widget.setValue(life ? 0.99 : 0.49)
+            widget.setSuffix(life ? "%" : "°")
         }
     }
     
@@ -502,11 +544,15 @@ public class Disk: Module {
                         default: return
                         }
                     case "$smart":
-                        guard let smart = d.smart else { return }
-                        switch pair.value {
-                        case "temperature": replacement = temperature(Double(smart.temperature))
-                        case "life": replacement = "\(smart.life)%"
-                        default: return
+                        if let smart = d.smart {
+                            switch pair.value {
+                            case "temperature": replacement = temperature(Double(smart.temperature))
+                            case "life": replacement = "\(smart.life)%"
+                            default: return
+                            }
+                        } else if pair.value == "temperature" || pair.value == "life" {
+                            // no SMART behind this volume: a dash like the drive widget, not the raw variable
+                            replacement = "-"
                         }
                     case "$percentage":
                         var percentage: Int

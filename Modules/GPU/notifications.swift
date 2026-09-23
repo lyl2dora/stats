@@ -49,7 +49,7 @@ class Notifications: NotificationsWrapper {
         let title = localizedString("GPU usage threshold")
         
         if self.usageState {
-            let subtitle = localizedString("GPU usage is", "\(Int((value)*100))%")
+            let subtitle = localizedString("GPU usage is", "\(value.roundedPercentage)%")
             self.checkDouble(id: self.usageID, value: value, threshold: Double(self.usageLevel)/100, title: title, subtitle: subtitle)
         }
     }

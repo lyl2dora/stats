@@ -296,7 +296,7 @@ internal class Popup: PopupWrapper {
         self.dashboardBatteryView.setValue(abs(value.level), connected: !value.isBatteryPowered, charging: value.isCharging)
         self.dashboardBatteryStatus.set(value)
         
-        self.levelField?.stringValue = "\(Int(abs(value.level) * 100))"
+        self.levelField?.stringValue = "\(abs(value.level).roundedPercentage)"
         self.levelField?.toolTip = "\(value.currentCapacity) mAh"
         
         self.sourceField?.stringValue = localizedString(value.powerSource)

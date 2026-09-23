@@ -657,6 +657,7 @@ internal class DriveRow: NSView {
         guard let smart = d.smart else {
             self.healthField.stringValue = localizedString("Unavailable")
             self.temperatureField.stringValue = "-"
+            self.temperatureField.textColor = .textColor
             self.bar.setValue(ColorValue(0))
             return
         }
@@ -736,7 +737,7 @@ private class LegendView: NSStackView {
             percentage = Int((Double(self.size - free) / Double(self.size)) * 100)
             value = localizedString("Used disk memory", DiskSize(usedSpace).getReadableMemory(), DiskSize(self.size).getReadableMemory())
         } else {
-            percentage = Int((Double(free) / Double(self.size)).rounded(toPlaces: 2) * 100)
+            percentage = (Double(free) / Double(self.size)).roundedPercentage
             value = localizedString("Free disk memory", DiskSize(free).getReadableMemory(), DiskSize(self.size).getReadableMemory())
         }
         

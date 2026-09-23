@@ -145,7 +145,8 @@ struct CircularGaugeView: View {
                 .animation(.easeInOut(duration: 0.3), value: self.progress)
             VStack(spacing: 0) {
                 Text(self.title).font(.system(size: 10))
-                Text("\(Int(self.progress * 100))%").font(.system(size: 12))
+                // rounded like the menu bar widgets, truncating reads 0.29 as 28%
+                Text("\(Int((self.progress * 100).rounded()))%").font(.system(size: 12))
             }
         }
         .frame(width: 60, height: 60)

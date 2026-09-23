@@ -103,10 +103,10 @@ public class Portal: PortalWrapper {
     internal func callback(_ value: CPU_Load) {
         DispatchQueue.main.async(execute: {
             if (self.window?.isVisible ?? false) || !self.initialized {
-                self.usageField?.stringValue = "\(Int(value.totalUsage.rounded(toPlaces: 2) * 100))%"
-                self.idleField?.stringValue = "\(Int(value.idleLoad.rounded(toPlaces: 2) * 100))%"
+                self.usageField?.stringValue = "\(value.totalUsage.roundedPercentage)%"
+                self.idleField?.stringValue = "\(value.idleLoad.roundedPercentage)%"
                 
-                self.circle.toolTip = "\(localizedString("CPU usage")): \(Int(value.totalUsage.rounded(toPlaces: 2) * 100))%"
+                self.circle.toolTip = "\(localizedString("CPU usage")): \(value.totalUsage.roundedPercentage)%"
                 self.circle.setValue(value.totalUsage)
                 self.circle.setSegments([
                     ColorValue(value.systemLoad, color: self.systemColor),

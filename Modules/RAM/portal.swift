@@ -77,8 +77,8 @@ public class Portal: PortalWrapper {
                 self.swapField?.stringValue = Units(bytes: Int64(value.swap.used)).getReadableMemory(style: .memory)
                 self.pressureLevelField?.stringValue = value.pressure.value.rawValue
                 
-                self.usedField?.toolTip = "\(Int(value.usage.rounded(toPlaces: 2) * 100))%"
-                self.freeField?.toolTip = "\(Int((1-value.usage).rounded(toPlaces: 2) * 100))%"
+                self.usedField?.toolTip = "\(value.usage.roundedPercentage)%"
+                self.freeField?.toolTip = "\((1-value.usage).roundedPercentage)%"
                 if let level = memoryPressureLevels.first(where: { $0.additional as? RAMPressure == value.pressure.value }) {
                     self.pressureLevelField?.toolTip = localizedString(level.value)
                 }

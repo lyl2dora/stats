@@ -52,7 +52,7 @@ internal class Portal: PortalWrapper {
         DispatchQueue.main.async(execute: {
             self.batteryView.setValue(abs(value.level), connected: !value.isBatteryPowered, charging: value.isCharging)
             
-            self.levelField?.stringValue = "\(Int(abs(value.level) * 100))%"
+            self.levelField?.stringValue = "\(abs(value.level).roundedPercentage)%"
             self.levelField?.toolTip = "\(value.currentCapacity) mAh"
             
             var status: String = localizedString("Charging")

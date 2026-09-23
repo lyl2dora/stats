@@ -18,9 +18,10 @@ public class Mini: WidgetWrapper {
     
     private var colors: [SColor] = SColor.allCases
     
-    private var _value: Double = 0
+    private var _value: Double? = 0
     private var _pressureLevel: RAMPressure = .normal
     private var _colorZones: colorZones = (0.6, 0.8)
+    private var _reversedZones: Bool = false
     private var _suffix: String = "%"
     
     private var defaultLabel: String
@@ -92,15 +93,17 @@ public class Mini: WidgetWrapper {
     public override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         
-        var value: Double = 0
+        var value: Double? = 0
         var pressureLevel: RAMPressure = .normal
         var colorZones: colorZones = (0.6, 0.8)
+        var reversedZones: Bool = false
         var label: String = ""
         var suffix: String = ""
         self.queue.sync {
             value = self._value
             pressureLevel = self._pressureLevel
             colorZones = self._colorZones
+            reversedZones = self._reversedZones
             label = self._label
             suffix = self._suffix
         }
@@ -129,7 +132,9 @@ public class Mini: WidgetWrapper {
         var color: NSColor = .controlAccentColor
         switch self.colorState {
         case .systemAccent: color = .controlAccentColor
-        case .utilization: color = value.usageColor(zones: colorZones, reversed: self.title == "BAT")
+        case .utilization:
+            // without a reading there is nothing to grade, keep the dash neutral
+            color = value?.usageColor(zones: colorZones, reversed: reversedZones || self.title == "BAT") ?? (isDarkMode ? NSColor.white : NSColor.black)
         case .pressure: color = pressureLevel.pressureColor()
         case .monochrome: color = (isDarkMode ? NSColor.white : NSColor.black)
         default: color = self.colorState.additional as? NSColor ?? .controlAccentColor
@@ -141,13 +146,15 @@ public class Mini: WidgetWrapper {
             NSAttributedString.Key.paragraphStyle: style
         ]
         let rect = CGRect(x: origin.x, y: origin.y, width: self.width - (Constants.Widget.margin.x*2), height: valueSize+1)
-        let str = NSAttributedString.init(string: "\(Int(value.rounded(toPlaces: 2) * 100))\(suffix)", attributes: stringAttributes)
+        // nil means there is no reading at all, a dash says so where 0 would pass for one
+        let text = value.map({ "\($0.roundedPercentage)\(suffix)" }) ?? "-"
+        let str = NSAttributedString.init(string: text, attributes: stringAttributes)
         str.draw(with: rect)
         
         self.setWidth(width)
     }
     
-    public func setValue(_ newValue: Double) {
+    public func setValue(_ newValue: Double?) {
         let updated = self.queue.sync { () -> Bool in
             guard self._value != newValue else { return false }
             self._value = newValue
@@ -187,10 +194,12 @@ public class Mini: WidgetWrapper {
         })
     }
     
-    public func setColorZones(_ newColorZones: colorZones) {
+    // reversed grades low values as the bad ones, like a battery level or a drive's remaining health
+    public func setColorZones(_ newColorZones: colorZones, reversed: Bool = false) {
         let updated = self.queue.sync { () -> Bool in
-            guard self._colorZones != newColorZones else { return false }
+            guard self._colorZones != newColorZones || self._reversedZones != reversed else { return false }
             self._colorZones = newColorZones
+            self._reversedZones = reversed
             return true
         }
         guard updated else { return }

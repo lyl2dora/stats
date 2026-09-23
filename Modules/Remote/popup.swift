@@ -504,14 +504,14 @@ private class RemoteItemView: NSStackView {
             self.dot.setColor(machine.online ? .systemGreen : .systemRed)
             
             if let cpu = machine.modules?.cpuUsage {
-                self.cpuLabel.stringValue = "\(Int(cpu.rounded(toPlaces: 2) * 100))%"
+                self.cpuLabel.stringValue = "\(cpu.roundedPercentage)%"
                 self.cpuBar.setValue(ColorValue(cpu))
             } else {
                 self.cpuLabel.stringValue = "—"
                 self.cpuBar.setValue(ColorValue(0))
             }
             if let ram = machine.modules?.ramUsage {
-                self.ramLabel.stringValue = "\(Int(ram.rounded(toPlaces: 2) * 100))%"
+                self.ramLabel.stringValue = "\(ram.roundedPercentage)%"
                 self.ramBar.setValue(ColorValue(ram))
             } else {
                 self.ramLabel.stringValue = "—"

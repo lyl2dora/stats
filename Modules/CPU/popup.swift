@@ -394,11 +394,11 @@ internal class Popup: PopupWrapper {
     }
     
     private func renderLoad(_ value: CPU_Load) {
-        self.systemField?.stringValue = "\(Int(value.systemLoad.rounded(toPlaces: 2) * 100))%"
-        self.userField?.stringValue = "\(Int(value.userLoad.rounded(toPlaces: 2) * 100))%"
-        self.idleField?.stringValue = "\(Int(value.idleLoad.rounded(toPlaces: 2) * 100))%"
+        self.systemField?.stringValue = "\(value.systemLoad.roundedPercentage)%"
+        self.userField?.stringValue = "\(value.userLoad.roundedPercentage)%"
+        self.idleField?.stringValue = "\(value.idleLoad.roundedPercentage)%"
         
-        self.circle?.toolTip = "\(localizedString("CPU usage")): \(Int(value.totalUsage.rounded(toPlaces: 2) * 100))%"
+        self.circle?.toolTip = "\(localizedString("CPU usage")): \(value.totalUsage.roundedPercentage)%"
         self.circle?.setValue(value.totalUsage)
         self.circle?.setSegments([
             ColorValue(value.systemLoad, color: self.systemColor),

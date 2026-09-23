@@ -34,6 +34,7 @@ public enum widget_t: String {
         
         var image: NSImage? = nil
         var preview: widget_p? = nil
+        var previewRect: NSRect = .zero
         var item: widget_p? = nil
         
         switch self {
@@ -114,17 +115,17 @@ public enum widget_t: String {
             default: width = view.bounds.width
             }
             
-            let r = NSRect(
+            previewRect = NSRect(
                 x: -view.frame.origin.x/2,
                 y: 0,
                 width: width - view.frame.origin.x,
                 height: view.bounds.height
             )
-            image = NSImage(data: view.dataWithPDF(inside: r))
+            image = NSImage(data: view.dataWithPDF(inside: previewRect))
         }
         
-        if let item = item, let image = image {
-            return SWidget(self, defaultWidget: defaultWidget, module: module, item: item, image: image)
+        if let item = item, let preview = preview, let image = image {
+            return SWidget(self, defaultWidget: defaultWidget, module: module, item: item, preview: preview, previewRect: previewRect, image: image)
         }
         
         return nil
@@ -239,8 +240,12 @@ public class SWidget {
     public let type: widget_t
     public let defaultWidget: widget_t
     public let module: String
-    public let image: NSImage
+    public private(set) var image: NSImage
     public var item: widget_p
+    
+    // the view the thumbnail is drawn from and the area it was cut from, kept so the thumbnail can be redrawn
+    private let preview: widget_p
+    private let previewRect: NSRect
     
     public var isActive: Bool {
         get { self.list.contains{ $0 == self.type } }
@@ -279,11 +284,13 @@ public class SWidget {
     private var menuBarItem: NSStatusItem? = nil
     private var originX: CGFloat
     
-    public init(_ type: widget_t, defaultWidget: widget_t, module: String, item: widget_p, image: NSImage) {
+    public init(_ type: widget_t, defaultWidget: widget_t, module: String, item: widget_p, preview: widget_p, previewRect: NSRect, image: NSImage) {
         self.type = type
         self.module = module
         self.item = item
         self.defaultWidget = defaultWidget
+        self.preview = preview
+        self.previewRect = previewRect
         self.image = image
         self.originX = item.frame.origin.x
         
@@ -329,6 +336,15 @@ public class SWidget {
         }
         
         NotificationCenter.default.post(name: .toggleWidget, object: nil, userInfo: ["module": self.module])
+    }
+    
+    // Redraws the thumbnail for a widget whose look follows a module setting, the thumbnail is otherwise
+    // drawn once from the config and would keep showing the default. Call it on the main thread.
+    public func updateImage(_ configure: (widget_p) -> Void) {
+        configure(self.preview)
+        guard let image = NSImage(data: self.preview.dataWithPDF(inside: self.previewRect)) else { return }
+        self.image = image
+        NotificationCenter.default.post(name: .widgetImageUpdated, object: self)
     }
     
     public func setMenuBarItem(state: Bool) {

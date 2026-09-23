@@ -394,7 +394,7 @@ public class LineChartView: ChartView {
             var str: String = ""
             let flatList = originalPoints.map{ $0?.value ?? 0 }
             if let value = flatList.max() {
-                str = toolTipFunc != nil ? toolTipFunc!(DoubleValue(value)) : "\(Int(value.rounded(toPlaces: 2) * 100))\(suffix)"
+                str = toolTipFunc != nil ? toolTipFunc!(DoubleValue(value)) : "\(value.roundedPercentage)\(suffix)"
             }
             let textWidth = str.widthOfString(usingFont: stringAttributes[NSAttributedString.Key.font] as! NSFont)
             let y = flipY ? xLegendHeight + 1 : height + xLegendHeight - 9
@@ -514,7 +514,7 @@ public class LineChartView: ChartView {
                 path.stroke()
                 
                 let date = self.dateFormatter.string(from: nearest.value.ts)
-                let roundedValue = Int(nearest.value.value.rounded(toPlaces: 2) * 100)
+                let roundedValue = nearest.value.value.roundedPercentage
                 let strValue = "\(roundedValue)\(suffix)"
                 let value = toolTipFunc != nil ? toolTipFunc!(nearest.value) : strValue
                 let tooltipWidth: CGFloat = 78
@@ -988,7 +988,7 @@ public class PieChartView: ChartView {
                 NSAttributedString.Key.paragraphStyle: NSMutableParagraphStyle()
             ]
             
-            let percentage = "\(Int(value.rounded(toPlaces: 2) * 100))%"
+            let percentage = "\(value.roundedPercentage)%"
             let width: CGFloat = percentage.widthOfString(usingFont: font)
             let rect = CGRect(x: (self.frame.width-width)/2, y: (self.frame.height-fontSize*11/15)/2, width: width, height: fontSize*12/15)
             let str = NSAttributedString.init(string: percentage, attributes: stringAttributes)
@@ -1312,7 +1312,7 @@ public class ColumnChartView: ChartView {
         if let p = self.cursor {
             let matchingBlock = list.first(where: { $0.path.contains(p) })
             if let block = matchingBlock {
-                let value = "\(Int(block.value.rounded(toPlaces: 2) * 100))%"
+                let value = "\(block.value.roundedPercentage)%"
                 let width: CGFloat = block.value == 1 ? 38 : block.value > 0.1 ? 32 : 24
                 let tooltipHeight: CGFloat = 12
                 let gap: CGFloat = 4

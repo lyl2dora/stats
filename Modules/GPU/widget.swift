@@ -75,7 +75,7 @@ public struct GPUWidget: Widget {
                             GeometryReader { geometry in
                                 if let anchor = chartProxy.plotFrame {
                                     let frame = geometry[anchor]
-                                    Text("\(Int((value.utilization ?? 0)*100))%")
+                                    Text("\((value.utilization ?? 0).roundedPercentage)%")
                                         .font(.system(size: 14, weight: .regular))
                                         .position(x: frame.midX, y: frame.midY-5)
                                     Text("GPU")
@@ -89,17 +89,17 @@ public struct GPUWidget: Widget {
                         HStack {
                             Text(localizedString("Usage")).font(.system(size: 12, weight: .regular)).foregroundColor(.secondary)
                             Spacer()
-                            Text("\(Int((value.utilization ?? 0)*100))%")
+                            Text("\((value.utilization ?? 0).roundedPercentage)%")
                         }
                         HStack {
                             Text(localizedString("Render")).font(.system(size: 12, weight: .regular)).foregroundColor(.secondary)
                             Spacer()
-                            Text("\(Int((value.renderUtilization ?? 0)*100))%")
+                            Text("\((value.renderUtilization ?? 0).roundedPercentage)%")
                         }
                         HStack {
                             Text(localizedString("Tiler")).font(.system(size: 12, weight: .regular)).foregroundColor(.secondary)
                             Spacer()
-                            Text("\(Int((value.tilerUtilization ?? 0)*100))%")
+                            Text("\((value.tilerUtilization ?? 0).roundedPercentage)%")
                         }
                     }
                 } else if !Provider().systemWidgetsUpdatesState {

@@ -57,7 +57,7 @@ public class Portal: PortalWrapper {
         DispatchQueue.main.async(execute: {
             if (self.window?.isVisible ?? false) || !self.initialized {
                 if let value = value.utilization {
-                    self.usageField?.stringValue = "\(Int(value*100))%"
+                    self.usageField?.stringValue = "\(value.roundedPercentage)%"
                 }
                 if let value = value.aneUtilization {
                     self.aneField?.stringValue = "\(Int(value*100))%"
@@ -66,7 +66,7 @@ public class Portal: PortalWrapper {
                     self.fpsField?.stringValue = "\(Int(value.rounded()))"
                 }
                 
-                self.circle.toolTip = "\(localizedString("GPU usage")): \(Int(value.utilization!*100))%"
+                self.circle.toolTip = "\(localizedString("GPU usage")): \(value.utilization!.roundedPercentage)%"
                 self.circle.setValue(value.utilization!)
                 
                 self.initialized = true

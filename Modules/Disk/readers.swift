@@ -447,9 +447,13 @@ internal class SMARTReader: Reader<[physicalDrive]> {
     private var cache: [String: smart_t] = [:]
     private var totals: [String: (read: Int64, write: Int64)] = [:]
     private var lastSMARTRead: Date? = nil
+    private var lastATASMART: Bool? = nil
     
     private var enabled: Bool {
         Store.shared.bool(key: "\(ModuleType.disk.stringValue)_SMART", defaultValue: true)
+    }
+    private var ATASMART: Bool {
+        Store.shared.bool(key: "\(ModuleType.disk.stringValue)_ATASMART", defaultValue: false)
     }
     private var smartInterval: Double {
         Double(Store.shared.int(key: "\(ModuleType.disk.stringValue)_smartInterval", defaultValue: 30))
@@ -467,11 +471,15 @@ internal class SMARTReader: Reader<[physicalDrive]> {
         }
         defer { IOObjectRelease(iterator) }
         
-        // only the SMART payload sits behind the setting, the drive list itself is always reported
-        if !self.enabled {
+        // only the SMART payload sits behind the setting, the drive list itself is always reported.
+        // Flipping ATA SMART changes which drives can report at all, so start over then too: a drive that
+        // no longer reads drops its last value, and one that now reads does not wait out the interval.
+        let ATASMART = self.ATASMART
+        if !self.enabled || ATASMART != self.lastATASMART {
             self.cache.removeAll()
             self.lastSMARTRead = nil
         }
+        self.lastATASMART = ATASMART
         
         // the identity and the io counters are cheap, the SMART payload is not: refresh it on its own cadence
         let refresh = self.enabled && (self.lastSMARTRead.map({ Date().timeIntervalSince($0) >= self.smartInterval }) ?? true)

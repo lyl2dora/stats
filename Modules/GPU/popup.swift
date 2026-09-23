@@ -157,22 +157,22 @@ internal class Popup: PopupWrapper {
         }
         
         if let utilization = value.utilization {
-            self.usageCircle?.toolTip = "\(localizedString("GPU usage")): \(Int(utilization.rounded(toPlaces: 2) * 100))%"
+            self.usageCircle?.toolTip = "\(localizedString("GPU usage")): \(utilization.roundedPercentage)%"
             self.usageCircle?.setValue(utilization)
             self.usageCircle?.display()
-            self.utilizationField?.stringValue = "\(Int(utilization*100))%"
+            self.utilizationField?.stringValue = "\(utilization.roundedPercentage)%"
         }
         if let utilization = value.renderUtilization {
-            self.renderCircle?.toolTip = "\(localizedString("Render usage")): \(Int(utilization.rounded(toPlaces: 2) * 100))%"
+            self.renderCircle?.toolTip = "\(localizedString("Render usage")): \(utilization.roundedPercentage)%"
             self.renderCircle?.setValue(utilization)
             self.renderCircle?.display()
-            self.renderField?.stringValue = "\(Int(utilization*100))%"
+            self.renderField?.stringValue = "\(utilization.roundedPercentage)%"
         }
         if let utilization = value.tilerUtilization {
-            self.tilerCircle?.toolTip = "\(localizedString("Tiler usage")): \(Int(utilization.rounded(toPlaces: 2) * 100))%"
+            self.tilerCircle?.toolTip = "\(localizedString("Tiler usage")): \(utilization.roundedPercentage)%"
             self.tilerCircle?.setValue(utilization)
             self.tilerCircle?.display()
-            self.tilerField?.stringValue = "\(Int(utilization*100))%"
+            self.tilerField?.stringValue = "\(utilization.roundedPercentage)%"
         }
         if let utilization = value.aneUtilization {
             self.aneField?.stringValue = "\(Int(utilization*100))%"

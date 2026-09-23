@@ -130,6 +130,15 @@ public extension Double {
         return (self * divisor).rounded() / divisor
     }
     
+    // A 0...1 ratio as a whole percentage. Rounding to two places and then truncating value*100 reads
+    // 0.29 as 28, because 0.29*100 is 28.999... in floating point.
+    var roundedPercentage: Int {
+        let value = (self * 100).rounded()
+        // Int() traps on NaN, infinity and anything past its range, a remote host can send any of those
+        guard value.isFinite, value > Double(Int.min), value < Double(Int.max) else { return 0 }
+        return Int(value)
+    }
+    
     func usageColor(zones: colorZones = (0.6, 0.8), reversed: Bool = false) -> NSColor {
         let firstColor: NSColor = NSColor.systemBlue
         let secondColor: NSColor = NSColor.orange
@@ -137,7 +146,8 @@ public extension Double {
         
         if reversed {
             switch self {
-            case 0...zones.orange:
+            // anything at or under the first line is the worst case, a drive worn past its rating reports below zero
+            case ...zones.orange:
                 return thirdColor
             case zones.orange...zones.red:
                 return secondColor
