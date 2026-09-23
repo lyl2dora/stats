@@ -905,7 +905,7 @@ class MQTTManager: NSObject {
     }
     
     public func connect() {
-        self.onStateQueue {
+        self.onStateQueue { [self] in
             guard !self.isConnected && !self.isConnecting else { return }
             self.isConnecting = true
             
